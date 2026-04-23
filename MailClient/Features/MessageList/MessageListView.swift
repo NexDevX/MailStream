@@ -7,22 +7,22 @@ struct MessageListView: View {
         VStack(spacing: 0) {
             HStack {
                 Text("Unified Inbox")
-                    .font(.system(size: 18, weight: .medium))
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(AppTheme.textPrimary)
 
                 Spacer()
 
                 Image(systemName: "line.3.horizontal.decrease")
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(AppTheme.textSecondary)
             }
-            .padding(.horizontal, 26)
-            .padding(.vertical, 24)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
 
             Divider()
 
             ScrollView {
-                LazyVStack(spacing: 18) {
+                LazyVStack(spacing: 12) {
                     ForEach(appState.filteredMessages) { message in
                         MessageCardView(
                             message: message,
@@ -33,7 +33,7 @@ struct MessageListView: View {
                         }
                     }
                 }
-                .padding(20)
+                .padding(14)
             }
             .overlay {
                 if appState.filteredMessages.isEmpty {
@@ -55,49 +55,50 @@ private struct MessageCardView: View {
     let isSelected: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(message.tag)
-                    .font(.system(size: 12, weight: .semibold))
-                    .tracking(1.1)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(0.9)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
                     .background(
                         Capsule(style: .continuous)
                             .fill(Color.black.opacity(0.05))
                     )
 
                 Text(message.senderName)
-                    .font(.system(size: 17, weight: .medium))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(AppTheme.textPrimary)
 
                 Spacer()
 
                 Text(message.timestampLabel)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AppTheme.textTertiary)
             }
 
             Text(message.subject)
-                .font(.system(size: 22, weight: .regular, design: .serif))
+                .font(.system(size: 16, weight: .regular, design: .serif))
                 .foregroundStyle(AppTheme.textPrimary)
                 .lineLimit(2)
 
             Text(message.preview)
-                .font(.system(size: 15, weight: .regular))
+                .font(.system(size: 13, weight: .regular))
                 .foregroundStyle(AppTheme.textSecondary)
-                .lineSpacing(4)
-                .lineLimit(3)
+                .lineSpacing(3)
+                .lineLimit(2)
         }
-        .padding(22)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(isSelected ? AppTheme.selectedCard : AppTheme.panel.opacity(0.65))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(isSelected ? Color.black.opacity(0.10) : Color.black.opacity(0.06), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(isSelected ? 0.08 : 0), radius: 18, x: 0, y: 8)
+        .shadow(color: Color.black.opacity(isSelected ? 0.06 : 0), radius: 12, x: 0, y: 6)
     }
 }

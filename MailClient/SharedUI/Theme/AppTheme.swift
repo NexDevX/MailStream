@@ -10,7 +10,14 @@ enum AppTheme {
     static let accent = Color(red: 0.106, green: 0.106, blue: 0.094)
     static let selectedCard = Color.white
 
-    static let sidebarWidth: CGFloat = 320
-    static let listWidth: CGFloat = 500
-    static let detailMinWidth: CGFloat = 680
+    static let sidebarWidth: CGFloat = 242
+    static let listWidth: CGFloat = 344
+    static let listMaxWidth: CGFloat = 392
+    static let detailMinWidth: CGFloat = 720
+
+    static let titleFontSize: CGFloat = 22
+    static let sidebarTitleSize: CGFloat = 24
+    static let sectionHeaderSize: CGFloat = 14
+    static let bodyFontSize: CGFloat = 15
+    static let captionSize: CGFloat = 12
 }

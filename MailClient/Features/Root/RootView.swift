@@ -16,7 +16,7 @@ struct RootView: View {
 
                 HSplitView {
                     MessageListView()
-                        .frame(minWidth: 420, idealWidth: AppTheme.listWidth, maxWidth: 560)
+                        .frame(minWidth: 316, idealWidth: AppTheme.listWidth, maxWidth: AppTheme.listMaxWidth)
 
                     MessageDetailView(message: appState.selectedMessage)
                         .frame(minWidth: AppTheme.detailMinWidth)
@@ -34,26 +34,26 @@ private struct TopBarView: View {
     @EnvironmentObject private var appState: AppState
 
     var body: some View {
-        HStack(spacing: 28) {
+        HStack(spacing: 24) {
             Text("MailStrea")
-                .font(.system(size: 28, weight: .regular, design: .serif))
+                .font(.system(size: AppTheme.titleFontSize, weight: .regular, design: .serif))
                 .foregroundStyle(AppTheme.textPrimary)
 
             Spacer()
 
-            HStack(spacing: 28) {
+            HStack(spacing: 24) {
                 ForEach(InboxFilter.allCases) { filter in
                     Button {
                         appState.selectedInboxFilter = filter
                     } label: {
-                        VStack(spacing: 8) {
+                        VStack(spacing: 6) {
                             Text(filter.rawValue)
-                                .font(.system(size: 17, weight: .medium))
+                                .font(.system(size: 15, weight: .medium))
                                 .foregroundStyle(appState.selectedInboxFilter == filter ? AppTheme.textPrimary : AppTheme.textSecondary)
 
                             Rectangle()
                                 .fill(appState.selectedInboxFilter == filter ? AppTheme.textPrimary : Color.clear)
-                                .frame(width: 42, height: 1.5)
+                                .frame(width: 38, height: 1.5)
                         }
                     }
                     .buttonStyle(.plain)
@@ -62,15 +62,15 @@ private struct TopBarView: View {
 
             Spacer()
 
-            HStack(spacing: 18) {
+            HStack(spacing: 16) {
                 Image(systemName: "slider.horizontal.3")
                 Image(systemName: "person.crop.circle")
             }
-            .font(.system(size: 20, weight: .medium))
+            .font(.system(size: 18, weight: .medium))
             .foregroundStyle(AppTheme.textPrimary)
         }
-        .padding(.horizontal, 38)
-        .padding(.vertical, 22)
+        .padding(.horizontal, 30)
+        .padding(.vertical, 18)
         .background(AppTheme.panel)
     }
 }

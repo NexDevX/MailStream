@@ -14,7 +14,7 @@ struct MessageDetailView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: 14) {
             CircleActionButton(systemImage: "arrowshape.turn.up.left")
             CircleActionButton(systemImage: "trash")
 
@@ -29,95 +29,95 @@ struct MessageDetailView: View {
             Spacer()
 
             Text(appState.selectionPositionText)
-                .font(.system(size: 15, weight: .medium))
+                .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(AppTheme.textSecondary)
         }
-        .padding(.horizontal, 28)
-        .padding(.vertical, 18)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 14)
     }
 
     @ViewBuilder
     private var content: some View {
         if let message {
             ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
+                VStack(alignment: .leading, spacing: 22) {
                     Text(message.subject)
-                        .font(.system(size: 44, weight: .regular, design: .serif))
+                        .font(.system(size: 32, weight: .regular, design: .serif))
                         .foregroundStyle(AppTheme.textPrimary)
                         .lineSpacing(2)
-                        .padding(.top, 28)
+                        .padding(.top, 22)
 
-                    HStack(alignment: .center, spacing: 18) {
+                    HStack(alignment: .center, spacing: 14) {
                         Circle()
                             .fill(Color.black.opacity(0.06))
-                            .frame(width: 52, height: 52)
+                            .frame(width: 44, height: 44)
                             .overlay {
                                 Text(message.senderInitials)
-                                    .font(.system(size: 20, weight: .medium))
+                                    .font(.system(size: 16, weight: .medium))
                                     .foregroundStyle(AppTheme.textSecondary)
                             }
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(message.senderName)
-                                .font(.system(size: 16, weight: .medium))
+                                .font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(AppTheme.textPrimary)
                             Text(message.recipientLine)
-                                .font(.system(size: 16, weight: .regular))
+                                .font(.system(size: 14, weight: .regular))
                                 .foregroundStyle(AppTheme.textSecondary)
                         }
 
                         Spacer()
 
                         Text(message.relativeTimestamp)
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(AppTheme.textSecondary)
                     }
 
-                    VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 16) {
                         ForEach(message.bodyParagraphs, id: \.self) { paragraph in
                             Text(paragraph)
-                                .font(.system(size: 18, weight: .regular))
+                                .font(.system(size: 15, weight: .regular))
                                 .foregroundStyle(AppTheme.textPrimary)
-                                .lineSpacing(8)
+                                .lineSpacing(6)
                         }
                     }
 
                     if message.highlights.isEmpty == false {
-                        VStack(alignment: .leading, spacing: 18) {
+                        VStack(alignment: .leading, spacing: 14) {
                             Text("Key Decisions:")
-                                .font(.system(size: 24, weight: .regular, design: .serif))
+                                .font(.system(size: 21, weight: .regular, design: .serif))
                                 .foregroundStyle(AppTheme.textPrimary)
 
-                            VStack(alignment: .leading, spacing: 18) {
+                            VStack(alignment: .leading, spacing: 14) {
                                 ForEach(message.highlights, id: \.self) { item in
-                                    HStack(alignment: .top, spacing: 12) {
+                                    HStack(alignment: .top, spacing: 10) {
                                         Text("•")
                                         Text(item)
-                                            .lineSpacing(6)
+                                            .lineSpacing(4)
                                     }
-                                    .font(.system(size: 16, weight: .regular))
+                                    .font(.system(size: 14, weight: .regular))
                                     .foregroundStyle(AppTheme.textPrimary)
                                 }
                             }
                         }
-                        .padding(28)
+                        .padding(22)
                         .background(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 .fill(AppTheme.canvas)
                         )
                         .overlay(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 .stroke(AppTheme.panelBorder, lineWidth: 1)
                         )
                     }
 
                     Text(message.closing)
-                        .font(.system(size: 18, weight: .regular))
+                        .font(.system(size: 15, weight: .regular))
                         .foregroundStyle(AppTheme.textPrimary)
-                        .lineSpacing(8)
-                        .padding(.bottom, 44)
+                        .lineSpacing(6)
+                        .padding(.bottom, 32)
                 }
-                .padding(.horizontal, 58)
+                .padding(.horizontal, 42)
             }
         } else {
             EmptyStateView(
@@ -136,9 +136,9 @@ private struct CircleActionButton: View {
     var body: some View {
         Button {} label: {
             Image(systemName: systemImage)
-                .font(.system(size: 15, weight: .medium))
+                .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(AppTheme.textSecondary)
-                .frame(width: 42, height: 42)
+                .frame(width: 36, height: 36)
                 .background(
                     Circle()
                         .fill(AppTheme.canvas)

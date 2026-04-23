@@ -7,15 +7,15 @@ struct SidebarView: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Workspace")
-                    .font(.system(size: 28, weight: .regular, design: .serif))
+                    .font(.system(size: AppTheme.sidebarTitleSize, weight: .regular, design: .serif))
                     .foregroundStyle(AppTheme.textPrimary)
 
                 Text("Editorial flow")
-                    .font(.system(size: 16, weight: .regular))
+                    .font(.system(size: 14, weight: .regular))
                     .foregroundStyle(AppTheme.textSecondary)
             }
-            .padding(.horizontal, 30)
-            .padding(.top, 28)
+            .padding(.horizontal, 24)
+            .padding(.top, 22)
 
             Button {
                 appState.isShowingCompose = true
@@ -23,55 +23,55 @@ struct SidebarView: View {
                 Label("Compose", systemImage: "square.and.pencil")
             }
             .buttonStyle(MailStreaPrimaryButtonStyle())
-            .padding(.horizontal, 30)
-            .padding(.top, 48)
+            .padding(.horizontal, 24)
+            .padding(.top, 34)
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 ForEach(SidebarItem.allCases) { item in
                     Button {
                         appState.selectedSidebarItem = item
                     } label: {
-                        HStack(spacing: 14) {
+                        HStack(spacing: 12) {
                             Capsule()
                                 .fill(appState.selectedSidebarItem == item ? AppTheme.textPrimary : Color.clear)
-                                .frame(width: 4, height: 22)
+                                .frame(width: 3, height: 18)
 
                             Image(systemName: item.systemImageName)
-                                .frame(width: 18)
-                                .font(.system(size: 16, weight: .medium))
+                                .frame(width: 16)
+                                .font(.system(size: 14, weight: .medium))
 
                             Text(item.rawValue)
-                                .font(.system(size: 16, weight: .medium))
+                                .font(.system(size: 14, weight: .medium))
 
                             Spacer()
                         }
                         .foregroundStyle(appState.selectedSidebarItem == item ? AppTheme.textPrimary : AppTheme.textSecondary)
-                        .padding(.vertical, 14)
-                        .padding(.horizontal, 14)
+                        .padding(.vertical, 11)
+                        .padding(.horizontal, 12)
                         .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
                                 .fill(appState.selectedSidebarItem == item ? Color.white.opacity(0.92) : Color.clear)
                         )
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 40)
+            .padding(.horizontal, 12)
+            .padding(.top, 28)
 
             Spacer()
 
             Divider()
                 .overlay(AppTheme.panelBorder)
-                .padding(.horizontal, 30)
-                .padding(.bottom, 24)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 18)
 
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 14) {
                 SidebarFootnoteRow(title: "Settings", systemImage: "gearshape.fill")
                 SidebarFootnoteRow(title: "Help", systemImage: "questionmark.circle.fill")
             }
-            .padding(.horizontal, 30)
-            .padding(.bottom, 28)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 22)
         }
         .background(AppTheme.panel)
     }
@@ -82,11 +82,11 @@ private struct SidebarFootnoteRow: View {
     let systemImage: String
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             Image(systemName: systemImage)
-                .frame(width: 18)
+                .frame(width: 16)
             Text(title)
-                .font(.system(size: 15, weight: .medium))
+                .font(.system(size: 13, weight: .medium))
         }
         .foregroundStyle(AppTheme.textSecondary)
     }
