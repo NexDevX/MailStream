@@ -1,0 +1,68 @@
+name: MailClient
+options:
+  minimumXcodeGenVersion: 2.38.0
+configs:
+  Debug: debug
+  Release: release
+settings:
+  base:
+    SWIFT_VERSION: 5.0
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+schemes:
+  MailClient:
+    build:
+      targets:
+        MailClient: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - MailClientTests
+    archive:
+      config: Release
+targets:
+  MailClient:
+    type: application
+    platform: macOS
+    sources:
+      - path: MailClient
+        excludes:
+          - Tests/**
+          - Resources/**
+    resources:
+      - path: MailClient/Resources/Assets.xcassets
+    settings:
+      base:
+        PRODUCT_NAME: MailStrea
+        PRODUCT_MODULE_NAME: MailStrea
+        PRODUCT_BUNDLE_IDENTIFIER: com.mailstrea.app
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: MailClient/App/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ICON_FILE: AppIcon
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGNING_ALLOWED: NO
+    postBuildScripts:
+      - name: Bundle App Icon
+        script: |
+          set -euo pipefail
+          destination="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Resources"
+          mkdir -p "$destination"
+          cp "$SRCROOT/MailClient/Resources/AppIcon.icns" "$destination/AppIcon.icns"
+        inputFiles:
+          - $(SRCROOT)/MailClient/Resources/AppIcon.icns
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/AppIcon.icns
+  MailClientTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: MailClient/Tests
+    dependencies:
+      - target: MailClient
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/MailStrea.app/Contents/MacOS/MailStrea
+        BUNDLE_LOADER: $(TEST_HOST)

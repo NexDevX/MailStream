@@ -23,11 +23,3 @@ struct EmptyStateView: View {
         .padding(24)
     }
 }
-
-#Preview {
-    EmptyStateView(
-        title: "No Results",
-        systemImage: "magnifyingglass",
-        message: "Try another query."
-    )
-}

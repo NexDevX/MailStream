@@ -1,43 +1,123 @@
-# MailClient
+# MailStrea
 
-基于 **SwiftUI + AppKit** 的 macOS 原生邮箱客户端。
+基于 **SwiftUI + AppKit** 的 macOS 原生邮箱客户端原型。
 
-## 技术特点
+当前仓库已经包含：
 
-* 原生性能优先，适合长期驻留与轻量后台运行
-* SwiftUI 负责主界面开发，提升开发效率与一致性
-* AppKit 用于补强高性能列表、窗口控制、快捷键、拖拽等桌面能力
-* 面向 macOS 原生体验，兼顾启动速度、内存占用与系统集成
-* 适合邮箱类应用的三栏布局、多窗口、通知与菜单能力扩展
+- 一个可直接生成的 macOS App 工程
+- 一个最小可运行的三栏邮件界面
+- 一个本地打包 `.dmg` 的脚本
+- 一个 GitHub Actions 自动构建和发布安装包的流程
+- 一套更清晰的工程基线：依赖装配、仓储层、文档和统一命令入口
 
-## 功能描述
+## 当前版本范围
 
-### 核心功能
+这版只解决两个问题：
 
-* 邮箱账户接入
-* 邮件列表浏览
-* 邮件详情查看
-* 新建 / 回复 / 转发
-* 草稿保存
-* 搜索
-* 设置管理
+- 有一个接近设计稿气质的桌面页面
+- 能在 macOS 本地编译成 `.app`，并进一步打包成 `.dmg`
 
-### 桌面能力
+这版还没有接入真实邮箱账号、同步、数据库和离线缓存。
 
-* 多窗口支持
-* 快捷键支持
-* 通知支持
-* 拖拽与原生交互增强
+## 本地运行
 
-### 后续扩展
+先生成 Xcode 工程：
 
-* 多账户统一管理
-* 本地全文检索
-* 离线缓存
-* 标签与规则能力
-* Spotlight 集成
+```bash
+xcodegen generate
+```
 
-## 适用定位
+然后可以用 Xcode 打开：
 
-适合以 **macOS 原生体验、性能、包体控制、长期维护** 为核心目标的邮箱客户端产品。
+```bash
+open MailClient.xcodeproj
+```
 
+也可以直接命令行编译：
+
+```bash
+xcodebuild \
+  -project MailClient.xcodeproj \
+  -scheme MailClient \
+  -configuration Debug \
+  -derivedDataPath build/DerivedData \
+  CODE_SIGNING_ALLOWED=NO \
+  clean build
+```
+
+统一命令入口：
+
+```bash
+make icon
+make generate
+make build
+make test
+make package
+```
+
+`make icon` 会重建仓库里的 macOS `AppIcon.appiconset` 和 `AppIcon.icns`，方便后续替换品牌图标时保持资源可重复生成。
+
+## 打包 DMG
+
+执行：
+
+```bash
+./scripts/build_dmg.sh
+```
+
+输出位置：
+
+```bash
+build/Release/MailStrea.dmg
+```
+
+## GitHub CI/CD
+
+仓库已经包含 GitHub Actions 工作流：
+
+- `push main`：自动构建 DMG，上传 artifact，并更新一个固定的 `latest-main` 预发布下载页
+- `push v* tag`：自动构建 DMG，并发布到 GitHub Releases 供用户下载
+
+工作流文件：
+
+```bash
+.github/workflows/build-release.yml
+```
+
+最小发布闭环建议：
+
+1. 开发完成后推送到 `main`
+2. 用户先从 `latest-main` 预发布页或本次 Actions artifact 下载测试包
+3. 需要正式版本时，再创建版本标签并推送
+
+示例：
+
+```bash
+git push origin main
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+完成后，用户可以在 GitHub 的 `Releases` 页面下载：
+
+- `Latest Preview` 对应的滚动预发布安装包
+- `MailStrea.dmg`
+- `MailStrea.dmg.sha256`
+
+如果只是内部预览，不发版本标签也可以，直接使用 `latest-main` 预发布页或对应 Actions artifact。
+
+## 目录说明
+
+- `MailClient/`: 应用源码
+- `project.yml`: `xcodegen` 工程描述
+- `Makefile`: 统一开发命令入口
+- `docs/architecture.md`: 分层和依赖约束
+- `scripts/build_dmg.sh`: 本地生成 `.dmg`
+
+## 注意
+
+当前生成的是**未签名**应用，适合本地开发和小范围测试分发。  
+如果后面要给普通用户稳定安装，还需要补：
+
+- Developer ID 签名
+- notarization 公证

@@ -2,7 +2,7 @@ import Foundation
 
 actor MailSyncService {
     func bootstrap() async {
-        MailClientLogger.sync.info("Bootstrapping MailClient services")
+        MailClientLogger.sync.info("Bootstrapping MailStrea services")
     }
 
     func refreshAll() async {
