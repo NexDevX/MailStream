@@ -35,15 +35,15 @@ jobs:
         run: ./scripts/build_dmg.sh
 
       - name: Generate checksum
-        run: shasum -a 256 build/Release/Lexicon-Mail.dmg > build/Release/Lexicon-Mail.dmg.sha256
+        run: shasum -a 256 build/Release/MailStrea.dmg > build/Release/MailStrea.dmg.sha256
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Lexicon-Mail-${{ github.sha }}
+          name: MailStrea-${{ github.sha }}
           path: |
-            build/Release/Lexicon-Mail.dmg
-            build/Release/Lexicon-Mail.dmg.sha256
+            build/Release/MailStrea.dmg
+            build/Release/MailStrea.dmg.sha256
           if-no-files-found: error
           retention-days: 14
 
@@ -59,6 +59,6 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           files: |
-            build/Release/Lexicon-Mail.dmg
-            build/Release/Lexicon-Mail.dmg.sha256
+            build/Release/MailStrea.dmg
+            build/Release/MailStrea.dmg.sha256
           generate_release_notes: true
