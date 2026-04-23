@@ -13,7 +13,7 @@ struct MailClientApp: App {
         WindowGroup(appState.strings.appName) {
             RootView()
                 .environmentObject(appState)
-                .frame(minWidth: 1160, minHeight: 760)
+                .frame(minWidth: 1180, minHeight: 760)
                 .task {
                     await appState.bootstrap()
                 }

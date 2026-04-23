@@ -11,61 +11,73 @@ struct ComposeView: View {
     @State private var localStatusMessage: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(appState.strings.compose)
-                .font(.system(size: 23, weight: .regular, design: .serif))
-                .foregroundStyle(AppTheme.textPrimary)
-
-            ComposeField(title: appState.strings.to, text: $recipient)
-            ComposeField(title: appState.strings.subject, text: $subject)
-
-            TextEditor(text: $messageBody)
-                .font(.system(size: AppTheme.bodyFontSize))
-                .scrollContentBackground(.hidden)
-                .padding(10)
-                .frame(minHeight: 220)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(AppTheme.canvas)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(AppTheme.panelBorder, lineWidth: 1)
-                )
-
-            if let localStatusMessage {
-                Text(localStatusMessage)
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppTheme.textSecondary)
-            }
-
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
+                Text(appState.strings.compose)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(AppTheme.textPrimary)
+
+                Spacer()
+
                 Button(appState.strings.cancel) {
                     dismiss()
                 }
                 .buttonStyle(.plain)
-
-                Spacer()
-
-                Button(appState.strings.saveDraft) {
-                    dismiss()
-                }
-                .buttonStyle(.plain)
-
-                Button(isSending ? appState.strings.syncingMailbox : appState.strings.send) {
-                    Task {
-                        await sendMessage()
-                    }
-                }
-                .buttonStyle(MailStreaPrimaryButtonStyle())
-                .frame(width: 148)
-                .disabled(isSending || recipient.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || messageBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .foregroundStyle(AppTheme.textSecondary)
             }
-            .padding(.top, 4)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 13) {
+                ComposeField(title: appState.strings.to, text: $recipient)
+                ComposeField(title: appState.strings.subject, text: $subject)
+
+                TextEditor(text: $messageBody)
+                    .font(.system(size: AppTheme.bodyFontSize))
+                    .scrollContentBackground(.hidden)
+                    .padding(11)
+                    .frame(minHeight: 230)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(AppTheme.panelMuted.opacity(0.58))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .stroke(AppTheme.panelBorder, lineWidth: 1)
+                    )
+
+                if let localStatusMessage {
+                    Text(localStatusMessage)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+
+                HStack {
+                    Button(appState.strings.saveDraft) {
+                        dismiss()
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(AppTheme.textSecondary)
+
+                    Spacer()
+
+                    Button(isSending ? appState.strings.syncingMailbox : appState.strings.send) {
+                        Task {
+                            await sendMessage()
+                        }
+                    }
+                    .buttonStyle(MailStreaPrimaryButtonStyle())
+                    .frame(width: 132)
+                    .disabled(isSending || recipient.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || messageBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                .padding(.top, 2)
+            }
+            .padding(18)
         }
-        .padding(20)
-        .frame(minWidth: 540, minHeight: 390)
-        .background(AppTheme.panel)
+        .frame(minWidth: 560, minHeight: 420)
+        .background(AppTheme.panelElevated)
     }
 
     private func sendMessage() async {
@@ -98,7 +110,7 @@ private struct ComposeField: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(AppTheme.textSecondary)
+                .foregroundStyle(AppTheme.textTertiary)
 
             TextField("", text: $text)
                 .textFieldStyle(.plain)
@@ -106,7 +118,7 @@ private struct ComposeField: View {
                 .padding(.vertical, 10)
                 .background(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(AppTheme.canvas)
+                        .fill(AppTheme.panelMuted.opacity(0.58))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)

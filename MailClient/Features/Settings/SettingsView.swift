@@ -94,8 +94,8 @@ struct SettingsView: View {
         .padding(.vertical, 9)
         .frame(maxWidth: 320)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color(red: 0.932, green: 0.935, blue: 0.975))
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(AppTheme.panelMuted.opacity(0.72))
         )
     }
 
@@ -109,11 +109,11 @@ struct SettingsView: View {
                 )
                 .frame(maxWidth: .infinity, minHeight: 160)
                 .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.white.opacity(0.74))
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(AppTheme.panelElevated)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .stroke(AppTheme.panelBorder, lineWidth: 1)
                 )
             } else {
@@ -248,11 +248,11 @@ struct SettingsView: View {
         }
         .padding(18)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.74))
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(AppTheme.panelElevated)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(AppTheme.panelBorder, lineWidth: 1)
         )
     }
@@ -286,11 +286,11 @@ struct SettingsView: View {
         }
         .padding(18)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.74))
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(AppTheme.panelElevated)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(AppTheme.panelBorder, lineWidth: 1)
         )
     }
@@ -404,17 +404,17 @@ private struct AccountCardView: View {
         }
         .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.8))
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(AppTheme.panelElevated)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(
                     appState.selectedAccountID == account.id ? providerTint.opacity(0.42) : AppTheme.panelBorder,
                     lineWidth: appState.selectedAccountID == account.id ? 1.4 : 1
                 )
         )
-        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .onTapGesture {
             appState.selectedAccountID = account.id
         }
@@ -522,11 +522,11 @@ private struct AddAccountCardView: View {
             }
             .frame(maxWidth: .infinity, minHeight: 176)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.white.opacity(0.55))
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(AppTheme.panelElevated.opacity(0.72))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(
                         isExpanded ? AppTheme.textPrimary.opacity(0.24) : AppTheme.panelBorder,
                         style: StrokeStyle(lineWidth: 1.2, dash: [7, 7])
@@ -570,7 +570,7 @@ private struct ProviderOptionCardView: View {
             .padding(12)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isSelected ? tint.opacity(0.10) : AppTheme.canvas.opacity(0.8))
+                    .fill(isSelected ? tint.opacity(0.10) : AppTheme.panelMuted.opacity(0.58))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -614,7 +614,7 @@ private struct AccountSettingsTextFieldStyle: TextFieldStyle {
             .padding(.vertical, 9)
             .background(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(AppTheme.canvas)
+                    .fill(AppTheme.panelMuted.opacity(0.58))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
