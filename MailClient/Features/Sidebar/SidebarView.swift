@@ -86,7 +86,11 @@ struct SidebarView: View {
                 .padding(.bottom, 12)
 
             VStack(alignment: .leading, spacing: 9) {
-                SidebarFootnoteRow(title: appState.strings.settings, systemImage: "gearshape.fill")
+                SettingsLink {
+                    SidebarFootnoteRow(title: appState.strings.settings, systemImage: "gearshape.fill")
+                }
+                .buttonStyle(.plain)
+
                 SidebarFootnoteRow(title: appState.strings.help, systemImage: "questionmark.circle.fill")
             }
             .padding(.horizontal, 16)
@@ -106,6 +110,7 @@ private struct SidebarFootnoteRow: View {
                 .frame(width: 15)
             Text(title)
                 .font(.system(size: 12, weight: .medium))
+            Spacer()
         }
         .foregroundStyle(AppTheme.textTertiary)
     }
