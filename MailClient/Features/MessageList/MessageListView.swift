@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MessageListView: View {
     @EnvironmentObject private var appState: AppState
+    @Namespace private var messageSelectionNamespace
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,19 +31,21 @@ struct MessageListView: View {
             Divider()
 
             ScrollView {
-                LazyVStack(spacing: 0) {
+                LazyVStack(spacing: 10) {
                     ForEach(appState.filteredMessages) { message in
                         MessageCardView(
                             message: message,
-                            isSelected: appState.selectedMessageID == message.id
+                            isSelected: appState.selectedMessageID == message.id,
+                            namespace: messageSelectionNamespace
                         )
                         .onTapGesture {
-                            appState.selectMessage(message)
+                            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                                appState.selectMessage(message)
+                            }
                         }
                     }
                 }
-                .padding(.vertical, 6)
-                .padding(.horizontal, 8)
+                .padding(12)
             }
             .overlay {
                 if appState.filteredMessages.isEmpty {
@@ -55,13 +58,14 @@ struct MessageListView: View {
             }
         }
         .background(AppTheme.panel)
-        .searchable(text: $appState.searchText, prompt: appState.strings.searchMail)
+        .animation(.spring(response: 0.34, dampingFraction: 0.86), value: appState.selectedMessageID)
     }
 }
 
 private struct MessageCardView: View {
     let message: MailMessage
     let isSelected: Bool
+    let namespace: Namespace.ID
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -120,17 +124,24 @@ private struct MessageCardView: View {
                 }
             }
         }
-        .padding(.vertical, 11)
-        .padding(.horizontal, 10)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(isSelected ? AppTheme.selectedCard : Color.clear)
-        )
+        .background {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(AppTheme.selectedCard)
+                    .matchedGeometryEffect(id: "messageSelection", in: namespace)
+                    .shadow(color: Color.black.opacity(0.07), radius: 16, x: 0, y: 6)
+            } else {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(AppTheme.panelElevated.opacity(0.52))
+            }
+        }
         .overlay(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .stroke(isSelected ? AppTheme.focusAccent.opacity(0.20) : Color.clear, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(isSelected ? AppTheme.focusAccent.opacity(0.22) : AppTheme.panelBorder.opacity(0.45), lineWidth: 1)
         )
-        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }

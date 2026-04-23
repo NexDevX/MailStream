@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SidebarView: View {
     @EnvironmentObject private var appState: AppState
+    @Namespace private var sidebarSelectionNamespace
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -29,7 +30,9 @@ struct SidebarView: View {
             VStack(alignment: .leading, spacing: 3) {
                 ForEach(SidebarItem.allCases) { item in
                     Button {
-                        appState.selectedSidebarItem = item
+                        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                            appState.selectedSidebarItem = item
+                        }
                     } label: {
                         let isSelected = appState.selectedSidebarItem == item
 
@@ -55,8 +58,15 @@ struct SidebarView: View {
                         .padding(.horizontal, 9)
                         .background(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(isSelected ? AppTheme.selectedCard : Color.clear)
+                                .fill(Color.clear)
                         )
+                        .background {
+                            if isSelected {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(AppTheme.selectedCard)
+                                    .matchedGeometryEffect(id: "sidebarSelection", in: sidebarSelectionNamespace)
+                            }
+                        }
                         .overlay(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .stroke(isSelected ? AppTheme.focusAccent.opacity(0.18) : Color.clear, lineWidth: 1)

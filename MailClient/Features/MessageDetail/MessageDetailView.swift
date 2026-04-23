@@ -3,6 +3,7 @@ import SwiftUI
 struct MessageDetailView: View {
     @EnvironmentObject private var appState: AppState
     let message: MailMessage?
+    let layout: AppTheme.LayoutMetrics
 
     var body: some View {
         VStack(spacing: 0) {
@@ -159,10 +160,13 @@ struct MessageDetailView: View {
                         .lineSpacing(5)
                         .padding(.bottom, 34)
                 }
-                .frame(maxWidth: 720, alignment: .leading)
-                .padding(.horizontal, 42)
+                .id(message.id)
+                .transition(.opacity.combined(with: .move(edge: .trailing)))
+                .frame(maxWidth: layout.detailContentWidth, alignment: .leading)
+                .padding(.horizontal, layout.detailHorizontalPadding)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .animation(.spring(response: 0.34, dampingFraction: 0.88), value: message.id)
         } else {
             EmptyStateView(
                 title: appState.strings.selectMessageTitle,
@@ -187,7 +191,7 @@ private struct ToolbarActionButton: View {
         Button {} label: {
             Image(systemName: systemImage)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(role == .destructive ? Color(red: 0.70, green: 0.16, blue: 0.13) : AppTheme.textSecondary)
+                .foregroundStyle(role == .destructive ? AppTheme.destructive : AppTheme.textSecondary)
                 .frame(width: 29, height: 29)
                 .background(
                     RoundedRectangle(cornerRadius: 7, style: .continuous)

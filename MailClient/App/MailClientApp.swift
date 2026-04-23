@@ -13,11 +13,12 @@ struct MailClientApp: App {
         WindowGroup(appState.strings.appName) {
             RootView()
                 .environmentObject(appState)
-                .frame(minWidth: 1180, minHeight: 760)
+                .frame(minWidth: 940, minHeight: 640)
                 .task {
                     await appState.bootstrap()
                 }
         }
+        .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentMinSize)
         .commands {
             CommandMenu(appState.strings.mailboxMenu) {

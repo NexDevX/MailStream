@@ -300,27 +300,27 @@ struct SettingsView: View {
         let isAvailable = appState.isProviderAvailable(provider)
         Text(isAvailable ? appState.strings.liveConnector : appState.strings.comingSoon)
             .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(isAvailable ? Color(red: 0.082, green: 0.508, blue: 0.337) : AppTheme.textSecondary)
+            .foregroundStyle(isAvailable ? AppTheme.success : AppTheme.textSecondary)
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
             .background(
                 Capsule(style: .continuous)
-                    .fill(isAvailable ? Color(red: 0.875, green: 0.969, blue: 0.929) : Color.black.opacity(0.06))
+                    .fill(isAvailable ? AppTheme.successSurface : AppTheme.panelMuted.opacity(0.82))
             )
     }
 
     private func providerTint(for provider: MailProviderType) -> Color {
         switch provider {
         case .qq:
-            return Color(red: 0.12, green: 0.33, blue: 0.91)
+            return AppTheme.providerQQ
         case .gmail:
-            return Color(red: 0.96, green: 0.27, blue: 0.24)
+            return AppTheme.providerGmail
         case .outlook:
-            return Color(red: 0.17, green: 0.39, blue: 0.88)
+            return AppTheme.providerOutlook
         case .icloud:
-            return Color(red: 0.29, green: 0.35, blue: 0.44)
+            return AppTheme.providerICloud
         case .customIMAPSMTP:
-            return Color(red: 0.58, green: 0.38, blue: 0.82)
+            return AppTheme.providerCustom
         }
     }
 }
@@ -423,15 +423,15 @@ private struct AccountCardView: View {
     private var providerTint: Color {
         switch account.providerType {
         case .qq:
-            return Color(red: 0.12, green: 0.33, blue: 0.91)
+            return AppTheme.providerQQ
         case .gmail:
-            return Color(red: 0.96, green: 0.27, blue: 0.24)
+            return AppTheme.providerGmail
         case .outlook:
-            return Color(red: 0.17, green: 0.39, blue: 0.88)
+            return AppTheme.providerOutlook
         case .icloud:
-            return Color(red: 0.29, green: 0.35, blue: 0.44)
+            return AppTheme.providerICloud
         case .customIMAPSMTP:
-            return Color(red: 0.58, green: 0.38, blue: 0.82)
+            return AppTheme.providerCustom
         }
     }
 
@@ -453,11 +453,11 @@ private struct AccountCardView: View {
     private var statusColor: Color {
         switch account.status {
         case .connected:
-            return Color(red: 0.05, green: 0.74, blue: 0.46)
+            return AppTheme.successBright
         case .syncing:
-            return Color(red: 0.15, green: 0.45, blue: 0.95)
+            return AppTheme.info
         case .error:
-            return Color(red: 0.91, green: 0.32, blue: 0.22)
+            return AppTheme.destructive
         case .disconnected:
             return AppTheme.textTertiary
         }
@@ -501,7 +501,7 @@ private struct AddAccountCardView: View {
         Button(action: action) {
             VStack(spacing: 12) {
                 Circle()
-                    .fill(Color(red: 0.935, green: 0.939, blue: 0.984))
+                    .fill(AppTheme.softIconSurface)
                     .frame(width: 54, height: 54)
                     .overlay {
                         Image(systemName: "plus")
@@ -554,7 +554,7 @@ private struct ProviderOptionCardView: View {
                         .foregroundStyle(tint)
                     Spacer()
                     Circle()
-                        .fill(isAvailable ? Color(red: 0.05, green: 0.74, blue: 0.46) : AppTheme.textTertiary.opacity(0.6))
+                        .fill(isAvailable ? AppTheme.successBright : AppTheme.textTertiary.opacity(0.6))
                         .frame(width: 7, height: 7)
                 }
 
@@ -583,15 +583,15 @@ private struct ProviderOptionCardView: View {
     private var tint: Color {
         switch provider {
         case .qq:
-            return Color(red: 0.12, green: 0.33, blue: 0.91)
+            return AppTheme.providerQQ
         case .gmail:
-            return Color(red: 0.96, green: 0.27, blue: 0.24)
+            return AppTheme.providerGmail
         case .outlook:
-            return Color(red: 0.17, green: 0.39, blue: 0.88)
+            return AppTheme.providerOutlook
         case .icloud:
-            return Color(red: 0.29, green: 0.35, blue: 0.44)
+            return AppTheme.providerICloud
         case .customIMAPSMTP:
-            return Color(red: 0.58, green: 0.38, blue: 0.82)
+            return AppTheme.providerCustom
         }
     }
 }
