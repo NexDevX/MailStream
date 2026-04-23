@@ -6,11 +6,11 @@ struct SidebarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Workspace")
+                Text(appState.strings.workspaceTitle)
                     .font(.system(size: AppTheme.sidebarTitleSize, weight: .regular, design: .serif))
                     .foregroundStyle(AppTheme.textPrimary)
 
-                Text("Editorial flow")
+                Text(appState.strings.workspaceSubtitle)
                     .font(.system(size: 14, weight: .regular))
                     .foregroundStyle(AppTheme.textSecondary)
             }
@@ -20,7 +20,7 @@ struct SidebarView: View {
             Button {
                 appState.isShowingCompose = true
             } label: {
-                Label("Compose", systemImage: "square.and.pencil")
+                Label(appState.strings.compose, systemImage: "square.and.pencil")
             }
             .buttonStyle(MailStreaPrimaryButtonStyle())
             .padding(.horizontal, 24)
@@ -40,7 +40,7 @@ struct SidebarView: View {
                                 .frame(width: 16)
                                 .font(.system(size: 14, weight: .medium))
 
-                            Text(item.rawValue)
+                            Text(item.title(in: appState.language))
                                 .font(.system(size: 14, weight: .medium))
 
                             Spacer()
@@ -67,8 +67,8 @@ struct SidebarView: View {
                 .padding(.bottom, 18)
 
             VStack(alignment: .leading, spacing: 14) {
-                SidebarFootnoteRow(title: "Settings", systemImage: "gearshape.fill")
-                SidebarFootnoteRow(title: "Help", systemImage: "questionmark.circle.fill")
+                SidebarFootnoteRow(title: appState.strings.settings, systemImage: "gearshape.fill")
+                SidebarFootnoteRow(title: appState.strings.help, systemImage: "questionmark.circle.fill")
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 22)

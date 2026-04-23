@@ -1,13 +1,21 @@
 import Foundation
 
-struct InMemoryMailRepository: MailRepository {
-    private let seedMessages: [MailMessage]
+actor InMemoryMailRepository: MailRepository {
+    private var messages: [MailMessage]
 
     init(seedMessages: [MailMessage]) {
-        self.seedMessages = seedMessages
+        self.messages = seedMessages
     }
 
-    func loadMessages() -> [MailMessage] {
-        seedMessages
+    func loadMessages() async -> [MailMessage] {
+        messages
+    }
+
+    func saveMessages(_ messages: [MailMessage]) async {
+        self.messages = messages
+    }
+
+    func appendMessage(_ message: MailMessage) async {
+        messages.insert(message, at: 0)
     }
 }

@@ -2,39 +2,33 @@ import SwiftUI
 
 @main
 struct MailClientApp: App {
-    private let container: AppContainer
     @StateObject private var appState: AppState
 
     init() {
         let container = AppContainer.live
-        self.container = container
         _appState = StateObject(wrappedValue: container.makeAppState())
     }
 
     var body: some Scene {
-        WindowGroup("MailStrea") {
+        WindowGroup(appState.strings.appName) {
             RootView()
                 .environmentObject(appState)
                 .frame(minWidth: 1380, minHeight: 900)
                 .task {
-                    await container.syncService.bootstrap()
-                    appState.reloadMessages()
+                    await appState.bootstrap()
                 }
         }
         .windowResizability(.contentMinSize)
         .commands {
-            CommandMenu("Mailbox") {
-                Button("Refresh") {
+            CommandMenu(appState.strings.mailboxMenu) {
+                Button(appState.strings.refresh) {
                     Task {
-                        await container.syncService.refreshAll()
-                        await MainActor.run {
-                            appState.reloadMessages()
-                        }
+                        await appState.refreshMailbox()
                     }
                 }
                 .keyboardShortcut("r")
 
-                Button("Compose") {
+                Button(appState.strings.compose) {
                     appState.isShowingCompose = true
                 }
                 .keyboardShortcut("n")
@@ -43,6 +37,7 @@ struct MailClientApp: App {
 
         Settings {
             SettingsView()
+                .environmentObject(appState)
         }
     }
 }

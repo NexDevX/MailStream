@@ -35,7 +35,7 @@ private struct TopBarView: View {
 
     var body: some View {
         HStack(spacing: 24) {
-            Text("MailStrea")
+            Text(appState.strings.appName)
                 .font(.system(size: AppTheme.titleFontSize, weight: .regular, design: .serif))
                 .foregroundStyle(AppTheme.textPrimary)
 
@@ -47,7 +47,7 @@ private struct TopBarView: View {
                         appState.selectedInboxFilter = filter
                     } label: {
                         VStack(spacing: 6) {
-                            Text(filter.rawValue)
+                            Text(filter.title(in: appState.language))
                                 .font(.system(size: 15, weight: .medium))
                                 .foregroundStyle(appState.selectedInboxFilter == filter ? AppTheme.textPrimary : AppTheme.textSecondary)
 

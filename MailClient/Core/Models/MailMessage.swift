@@ -1,6 +1,6 @@
 import Foundation
 
-enum SidebarItem: String, CaseIterable, Identifiable, Sendable {
+enum SidebarItem: String, CaseIterable, Identifiable, Sendable, Codable {
     case allMail = "All Mail"
     case priority = "Priority"
     case drafts = "Drafts"
@@ -25,7 +25,7 @@ enum SidebarItem: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-enum InboxFilter: String, CaseIterable, Identifiable, Sendable {
+enum InboxFilter: String, CaseIterable, Identifiable, Sendable, Codable {
     case inbox = "Inbox"
     case focused = "Focused"
     case archive = "Archive"
@@ -33,8 +33,9 @@ enum InboxFilter: String, CaseIterable, Identifiable, Sendable {
     var id: String { rawValue }
 }
 
-struct MailMessage: Identifiable, Hashable, Sendable {
+struct MailMessage: Identifiable, Hashable, Sendable, Codable {
     let id: UUID
+    let accountID: UUID?
     let sidebarItem: SidebarItem
     let inboxFilter: InboxFilter
     let senderName: String
@@ -52,6 +53,7 @@ struct MailMessage: Identifiable, Hashable, Sendable {
 
     init(
         id: UUID = UUID(),
+        accountID: UUID? = nil,
         sidebarItem: SidebarItem,
         inboxFilter: InboxFilter,
         senderName: String,
@@ -68,6 +70,7 @@ struct MailMessage: Identifiable, Hashable, Sendable {
         closing: String
     ) {
         self.id = id
+        self.accountID = accountID
         self.sidebarItem = sidebarItem
         self.inboxFilter = inboxFilter
         self.senderName = senderName

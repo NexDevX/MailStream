@@ -6,7 +6,7 @@ struct MessageListView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Unified Inbox")
+                Text(appState.strings.unifiedInbox)
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(AppTheme.textPrimary)
 
@@ -38,15 +38,15 @@ struct MessageListView: View {
             .overlay {
                 if appState.filteredMessages.isEmpty {
                     EmptyStateView(
-                        title: "No messages here",
+                        title: appState.strings.noMessagesTitle,
                         systemImage: "tray",
-                        message: "Try another folder or clear the current search."
+                        message: appState.strings.noMessagesMessage
                     )
                 }
             }
         }
         .background(AppTheme.canvas)
-        .searchable(text: $appState.searchText, prompt: "Search mail")
+        .searchable(text: $appState.searchText, prompt: appState.strings.searchMail)
     }
 }
 

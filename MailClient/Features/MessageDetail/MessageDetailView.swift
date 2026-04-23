@@ -84,7 +84,7 @@ struct MessageDetailView: View {
 
                     if message.highlights.isEmpty == false {
                         VStack(alignment: .leading, spacing: 14) {
-                            Text("Key Decisions:")
+                            Text(appState.strings.keyDecisions)
                                 .font(.system(size: 21, weight: .regular, design: .serif))
                                 .foregroundStyle(AppTheme.textPrimary)
 
@@ -121,9 +121,9 @@ struct MessageDetailView: View {
             }
         } else {
             EmptyStateView(
-                title: "Select a message",
+                title: appState.strings.selectMessageTitle,
                 systemImage: "envelope.open",
-                message: "Pick an item from the list to open the reading surface."
+                message: appState.strings.selectMessageMessage
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
