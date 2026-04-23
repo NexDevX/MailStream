@@ -14,7 +14,7 @@ struct SettingsView: View {
     @State private var isShowingAccountSetup = false
 
     private let columns = [
-        GridItem(.adaptive(minimum: 260, maximum: 340), spacing: 18)
+        GridItem(.adaptive(minimum: 220, maximum: 292), spacing: 14)
     ]
 
     private var filteredAccounts: [MailAccount] {
@@ -40,7 +40,7 @@ struct SettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: 20) {
                 header
                 accountsGrid
 
@@ -50,26 +50,26 @@ struct SettingsView: View {
 
                 preferencesPanel
             }
-            .padding(28)
+            .padding(22)
         }
-        .frame(width: 980, height: 760)
+        .frame(width: 840, height: 640)
         .background(AppTheme.panel)
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 18) {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
                 searchField
                 Spacer(minLength: 0)
             }
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(appState.strings.connectedAccounts)
-                    .font(.system(size: 46, weight: .semibold))
+                    .font(.system(size: 32, weight: .semibold))
                     .foregroundStyle(AppTheme.textPrimary)
 
                 Text(appState.strings.connectedAccountsSubtitle)
-                    .font(.system(size: 18))
+                    .font(.system(size: 14))
                     .foregroundStyle(AppTheme.textSecondary)
             }
 
@@ -82,37 +82,38 @@ struct SettingsView: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(AppTheme.textTertiary)
 
             TextField(appState.strings.searchAccounts, text: $accountSearchText)
                 .textFieldStyle(.plain)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .frame(maxWidth: 380)
+        .font(.system(size: 13))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .frame(maxWidth: 320)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Color(red: 0.932, green: 0.935, blue: 0.975))
         )
     }
 
     private var accountsGrid: some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 18) {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
             if filteredAccounts.isEmpty {
                 EmptyStateView(
                     title: appState.strings.noAccountsTitle,
                     systemImage: "tray.2",
                     message: appState.strings.noAccountsMessage
                 )
-                .frame(maxWidth: .infinity, minHeight: 220)
+                .frame(maxWidth: .infinity, minHeight: 160)
                 .background(
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(Color.white.opacity(0.74))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .stroke(AppTheme.panelBorder, lineWidth: 1)
                 )
             } else {
@@ -130,17 +131,17 @@ struct SettingsView: View {
     }
 
     private var addAccountPanel: some View {
-        HStack(alignment: .top, spacing: 24) {
-            VStack(alignment: .leading, spacing: 18) {
+        HStack(alignment: .top, spacing: 18) {
+            VStack(alignment: .leading, spacing: 14) {
                 Text(appState.strings.accountSetup)
-                    .font(.system(size: 26, weight: .semibold))
+                    .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(AppTheme.textPrimary)
 
                 Text(appState.strings.plannedProviderHint)
-                    .font(.system(size: 14))
+                    .font(.system(size: 13))
                     .foregroundStyle(AppTheme.textSecondary)
 
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 180), spacing: 12)], spacing: 12) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 128, maximum: 150), spacing: 10)], spacing: 10) {
                     ForEach(MailProviderType.allCases) { provider in
                         ProviderOptionCardView(
                             provider: provider,
@@ -152,17 +153,17 @@ struct SettingsView: View {
                     }
                 }
             }
-            .frame(maxWidth: 360, alignment: .leading)
+            .frame(maxWidth: 310, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 5) {
                         Text(appState.strings.connectNewAccount)
-                            .font(.system(size: 22, weight: .semibold))
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(AppTheme.textPrimary)
 
                         Text(appState.strings.selectService)
-                            .font(.system(size: 14))
+                            .font(.system(size: 13))
                             .foregroundStyle(AppTheme.textSecondary)
                     }
 
@@ -171,40 +172,40 @@ struct SettingsView: View {
                     providerBadge(providerType)
                 }
 
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     Image(systemName: providerType.systemImageName)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(providerTint(for: providerType))
-                        .frame(width: 38, height: 38)
+                        .frame(width: 32, height: 32)
                         .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .fill(providerTint(for: providerType).opacity(0.12))
                         )
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(providerType.displayName(language: appState.language))
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(AppTheme.textPrimary)
 
                         Text(appState.isProviderAvailable(providerType) ? appState.strings.availableNow : appState.strings.comingSoon)
-                            .font(.system(size: 13))
+                            .font(.system(size: 12))
                             .foregroundStyle(AppTheme.textSecondary)
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 8) {
                     SettingsFieldLabel(title: appState.strings.accountName)
                     TextField(appState.strings.accountNamePlaceholder, text: $accountName)
                         .textFieldStyle(AccountSettingsTextFieldStyle())
                 }
 
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 8) {
                     SettingsFieldLabel(title: appState.strings.emailAddress)
                     TextField(appState.strings.emailAddress, text: $emailAddress)
                         .textFieldStyle(AccountSettingsTextFieldStyle())
                 }
 
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 8) {
                     SettingsFieldLabel(title: appState.strings.accountSecret)
                     SecureField(appState.strings.accountSecret, text: $secret)
                         .textFieldStyle(AccountSettingsTextFieldStyle())
@@ -229,7 +230,7 @@ struct SettingsView: View {
                         }
                     }
                     .buttonStyle(MailStreaPrimaryButtonStyle())
-                    .frame(width: 220)
+                    .frame(width: 172)
                     .disabled(connectButtonDisabled)
 
                     Spacer()
@@ -245,22 +246,22 @@ struct SettingsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(24)
+        .padding(18)
         .background(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.white.opacity(0.74))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(AppTheme.panelBorder, lineWidth: 1)
         )
     }
 
     private var preferencesPanel: some View {
-        HStack(alignment: .top, spacing: 18) {
-            VStack(alignment: .leading, spacing: 18) {
+        HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text(appState.strings.languageSection)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(AppTheme.textPrimary)
 
                 Picker(appState.strings.displayLanguage, selection: $appState.language) {
@@ -272,9 +273,9 @@ struct SettingsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text(appState.strings.general)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(AppTheme.textPrimary)
 
                 Toggle(appState.strings.enableNotifications, isOn: $notificationsEnabled)
@@ -283,13 +284,13 @@ struct SettingsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(24)
+        .padding(18)
         .background(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.white.opacity(0.74))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(AppTheme.panelBorder, lineWidth: 1)
         )
     }
@@ -300,8 +301,8 @@ struct SettingsView: View {
         Text(isAvailable ? appState.strings.liveConnector : appState.strings.comingSoon)
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(isAvailable ? Color(red: 0.082, green: 0.508, blue: 0.337) : AppTheme.textSecondary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
             .background(
                 Capsule(style: .continuous)
                     .fill(isAvailable ? Color(red: 0.875, green: 0.969, blue: 0.929) : Color.black.opacity(0.06))
@@ -330,15 +331,15 @@ private struct AccountCardView: View {
     let account: MailAccount
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(providerTint.opacity(0.15))
-                        .frame(width: 48, height: 48)
+                        .frame(width: 38, height: 38)
 
                     Image(systemName: account.providerType.systemImageName)
-                        .font(.system(size: 22, weight: .semibold))
+                        .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(providerTint)
                 }
 
@@ -350,70 +351,70 @@ private struct AccountCardView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(AppTheme.textTertiary)
-                        .frame(width: 30, height: 30)
+                        .frame(width: 26, height: 26)
                 }
                 .buttonStyle(.plain)
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(account.displayName)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(AppTheme.textPrimary)
 
                 Text(account.emailAddress)
-                    .font(.system(size: 13))
+                    .font(.system(size: 12))
                     .foregroundStyle(AppTheme.textSecondary)
             }
 
-            HStack(spacing: 8) {
+            HStack(spacing: 7) {
                 Circle()
                     .fill(statusColor)
-                    .frame(width: 9, height: 9)
+                    .frame(width: 7, height: 7)
 
                 Text(statusText)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppTheme.textSecondary)
                     .lineLimit(2)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(account.providerType.displayName(language: appState.language))
                     Spacer()
                     Text(appState.isProviderAvailable(account.providerType) ? appState.strings.availableNow : appState.strings.comingSoon)
                 }
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(AppTheme.textSecondary)
 
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 999, style: .continuous)
                             .fill(Color.black.opacity(0.08))
-                            .frame(height: 7)
+                            .frame(height: 5)
 
                         RoundedRectangle(cornerRadius: 999, style: .continuous)
                             .fill(providerTint)
-                            .frame(width: geometry.size.width * progressValue, height: 7)
+                            .frame(width: geometry.size.width * progressValue, height: 5)
                     }
                 }
-                .frame(height: 7)
+                .frame(height: 5)
             }
         }
-        .padding(22)
+        .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.white.opacity(0.8))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(
                     appState.selectedAccountID == account.id ? providerTint.opacity(0.42) : AppTheme.panelBorder,
                     lineWidth: appState.selectedAccountID == account.id ? 1.4 : 1
                 )
         )
-        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .onTapGesture {
             appState.selectedAccountID = account.id
         }
@@ -498,34 +499,34 @@ private struct AddAccountCardView: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 16) {
+            VStack(spacing: 12) {
                 Circle()
                     .fill(Color(red: 0.935, green: 0.939, blue: 0.984))
-                    .frame(width: 74, height: 74)
+                    .frame(width: 54, height: 54)
                     .overlay {
                         Image(systemName: "plus")
-                            .font(.system(size: 26, weight: .medium))
+                            .font(.system(size: 20, weight: .medium))
                             .foregroundStyle(AppTheme.textSecondary)
                     }
 
-                VStack(spacing: 6) {
+                VStack(spacing: 4) {
                     Text(appState.strings.connectNewAccount)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(AppTheme.textPrimary)
 
                     Text("QQ, Gmail, Outlook, iCloud, IMAP / SMTP")
-                        .font(.system(size: 13))
+                        .font(.system(size: 12))
                         .foregroundStyle(AppTheme.textSecondary)
                         .multilineTextAlignment(.center)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 248)
+            .frame(maxWidth: .infinity, minHeight: 176)
             .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(Color.white.opacity(0.55))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(
                         isExpanded ? AppTheme.textPrimary.opacity(0.24) : AppTheme.panelBorder,
                         style: StrokeStyle(lineWidth: 1.2, dash: [7, 7])
@@ -546,33 +547,33 @@ private struct ProviderOptionCardView: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Image(systemName: provider.systemImageName)
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(tint)
                     Spacer()
                     Circle()
                         .fill(isAvailable ? Color(red: 0.05, green: 0.74, blue: 0.46) : AppTheme.textTertiary.opacity(0.6))
-                        .frame(width: 8, height: 8)
+                        .frame(width: 7, height: 7)
                 }
 
                 Text(provider.displayName(language: appState.language))
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AppTheme.textPrimary)
 
                 Text(isAvailable ? appState.strings.availableNow : appState.strings.comingSoon)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AppTheme.textSecondary)
             }
-            .frame(maxWidth: .infinity, minHeight: 108, alignment: .leading)
-            .padding(16)
+            .frame(maxWidth: .infinity, minHeight: 84, alignment: .leading)
+            .padding(12)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(isSelected ? tint.opacity(0.10) : AppTheme.canvas.opacity(0.8))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(isSelected ? tint.opacity(0.42) : AppTheme.panelBorder, lineWidth: isSelected ? 1.4 : 1)
             )
         }
@@ -600,7 +601,7 @@ private struct SettingsFieldLabel: View {
 
     var body: some View {
         Text(title)
-            .font(.system(size: 13, weight: .semibold))
+            .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(AppTheme.textSecondary)
     }
 }
@@ -609,14 +610,14 @@ private struct AccountSettingsTextFieldStyle: TextFieldStyle {
     func _body(configuration: TextField<Self._Label>) -> some View {
         configuration
             .textFieldStyle(.plain)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 9)
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .fill(AppTheme.canvas)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .stroke(AppTheme.panelBorder, lineWidth: 1)
             )
     }

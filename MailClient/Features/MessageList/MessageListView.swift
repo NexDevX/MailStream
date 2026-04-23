@@ -7,22 +7,22 @@ struct MessageListView: View {
         VStack(spacing: 0) {
             HStack {
                 Text(appState.strings.unifiedInbox)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(AppTheme.textPrimary)
 
                 Spacer()
 
                 Image(systemName: "line.3.horizontal.decrease")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(AppTheme.textSecondary)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 18)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
 
             Divider()
 
             ScrollView {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: 9) {
                     ForEach(appState.filteredMessages) { message in
                         MessageCardView(
                             message: message,
@@ -33,7 +33,7 @@ struct MessageListView: View {
                         }
                     }
                 }
-                .padding(14)
+                .padding(10)
             }
             .overlay {
                 if appState.filteredMessages.isEmpty {
@@ -55,20 +55,20 @@ private struct MessageCardView: View {
     let isSelected: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(message.tag)
                     .font(.system(size: 10, weight: .semibold))
-                    .tracking(0.9)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
+                    .tracking(0.5)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
                     .background(
                         Capsule(style: .continuous)
                             .fill(Color.black.opacity(0.05))
                     )
 
                 Text(message.senderName)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AppTheme.textPrimary)
 
                 Spacer()
@@ -79,26 +79,26 @@ private struct MessageCardView: View {
             }
 
             Text(message.subject)
-                .font(.system(size: 16, weight: .regular, design: .serif))
+                .font(.system(size: 14, weight: .regular, design: .serif))
                 .foregroundStyle(AppTheme.textPrimary)
                 .lineLimit(2)
 
             Text(message.preview)
-                .font(.system(size: 13, weight: .regular))
+                .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(AppTheme.textSecondary)
-                .lineSpacing(3)
+                .lineSpacing(2)
                 .lineLimit(2)
         }
-        .padding(16)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(isSelected ? AppTheme.selectedCard : AppTheme.panel.opacity(0.65))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(isSelected ? Color.black.opacity(0.10) : Color.black.opacity(0.06), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(isSelected ? 0.06 : 0), radius: 12, x: 0, y: 6)
+        .shadow(color: Color.black.opacity(isSelected ? 0.045 : 0), radius: 8, x: 0, y: 4)
     }
 }

@@ -11,25 +11,25 @@ struct ComposeView: View {
     @State private var localStatusMessage: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 14) {
             Text(appState.strings.compose)
-                .font(.system(size: 28, weight: .regular, design: .serif))
+                .font(.system(size: 23, weight: .regular, design: .serif))
                 .foregroundStyle(AppTheme.textPrimary)
 
             ComposeField(title: appState.strings.to, text: $recipient)
             ComposeField(title: appState.strings.subject, text: $subject)
 
             TextEditor(text: $messageBody)
-                .font(.system(size: 15))
+                .font(.system(size: AppTheme.bodyFontSize))
                 .scrollContentBackground(.hidden)
-                .padding(12)
-                .frame(minHeight: 260)
+                .padding(10)
+                .frame(minHeight: 220)
                 .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(AppTheme.canvas)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(AppTheme.panelBorder, lineWidth: 1)
                 )
 
@@ -58,13 +58,13 @@ struct ComposeView: View {
                     }
                 }
                 .buttonStyle(MailStreaPrimaryButtonStyle())
-                .frame(width: 180)
+                .frame(width: 148)
                 .disabled(isSending || recipient.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || messageBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            .padding(.top, 6)
+            .padding(.top, 4)
         }
-        .padding(24)
-        .frame(minWidth: 620, minHeight: 460)
+        .padding(20)
+        .frame(minWidth: 540, minHeight: 390)
         .background(AppTheme.panel)
     }
 
@@ -95,21 +95,21 @@ private struct ComposeField: View {
     @Binding var text: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(AppTheme.textSecondary)
 
             TextField("", text: $text)
                 .textFieldStyle(.plain)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 14)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 10)
                 .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .fill(AppTheme.canvas)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .stroke(AppTheme.panelBorder, lineWidth: 1)
                 )
         }

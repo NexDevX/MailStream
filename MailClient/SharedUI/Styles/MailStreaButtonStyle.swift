@@ -6,8 +6,8 @@ struct MailStreaPrimaryButtonStyle: ButtonStyle {
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(Color.white)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 13)
+            .padding(.vertical, 10)
             .background(AppTheme.accent.opacity(configuration.isPressed ? 0.82 : 1))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
     }
 }
