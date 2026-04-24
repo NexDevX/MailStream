@@ -2,116 +2,350 @@ import SwiftUI
 
 struct SidebarView: View {
     @EnvironmentObject private var appState: AppState
-    @Namespace private var sidebarSelectionNamespace
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(appState.strings.workspaceTitle)
-                    .font(.system(size: AppTheme.sidebarTitleSize, weight: .semibold))
-                    .foregroundStyle(AppTheme.textPrimary)
+            brandHeader
+            composeButton
+                .padding(.horizontal, 12)
+                .padding(.top, 2)
+                .padding(.bottom, 6)
 
-                Text(appState.strings.workspaceSubtitle)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppTheme.textTertiary)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 18)
+            navSection
+                .padding(.top, 4)
 
-            Button {
-                appState.isShowingCompose = true
-            } label: {
-                Label(appState.strings.compose, systemImage: "square.and.pencil")
-            }
-            .buttonStyle(MailStreaPrimaryButtonStyle())
-            .padding(.horizontal, 16)
-            .padding(.top, 18)
+            accountsSection
+            labelsSection
 
-            VStack(alignment: .leading, spacing: 3) {
-                ForEach(SidebarItem.allCases) { item in
-                    Button {
-                        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                            appState.selectedSidebarItem = item
-                        }
-                    } label: {
-                        let isSelected = appState.selectedSidebarItem == item
+            Spacer(minLength: 0)
 
-                        HStack(spacing: 10) {
-                            Image(systemName: item.systemImageName)
-                                .frame(width: 17)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(isSelected ? AppTheme.focusAccent : AppTheme.textTertiary)
-
-                            Text(item.title(in: appState.language))
-                                .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
-
-                            Spacer()
-
-                            if isSelected {
-                                Circle()
-                                    .fill(AppTheme.focusAccent)
-                                    .frame(width: 5, height: 5)
-                            }
-                        }
-                        .foregroundStyle(isSelected ? AppTheme.textPrimary : AppTheme.textSecondary)
-                        .padding(.vertical, 7)
-                        .padding(.horizontal, 9)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.clear)
-                        )
-                        .background {
-                            if isSelected {
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(AppTheme.selectedCard)
-                                    .matchedGeometryEffect(id: "sidebarSelection", in: sidebarSelectionNamespace)
-                            }
-                        }
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(isSelected ? AppTheme.focusAccent.opacity(0.18) : Color.clear, lineWidth: 1)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.top, 18)
-
-            Spacer()
-
-            Divider()
-                .overlay(AppTheme.panelBorder)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 12)
-
-            VStack(alignment: .leading, spacing: 9) {
-                SettingsLink {
-                    SidebarFootnoteRow(title: appState.strings.settings, systemImage: "gearshape.fill")
-                }
-                .buttonStyle(.plain)
-
-                SidebarFootnoteRow(title: appState.strings.help, systemImage: "questionmark.circle.fill")
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 14)
+            userFooter
         }
-        .background(AppTheme.panel)
+        .background(DS.Color.surface2)
+        .overlay(alignment: .trailing) {
+            Rectangle().fill(DS.Color.line).frame(width: 1)
+        }
+    }
+
+    // MARK: – Brand
+
+    private var brandHeader: some View {
+        HStack(spacing: 8) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(LinearGradient(
+                        colors: [Color(white: 0.13), Color(white: 0.05)],
+                        startPoint: .top, endPoint: .bottom
+                    ))
+                    .frame(width: 22, height: 22)
+                Text("M")
+                    .font(DS.Font.mono(11, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            Text("MailStream")
+                .font(DS.Font.sans(13, weight: .semibold))
+                .foregroundStyle(DS.Color.ink)
+            Spacer()
+            DSIcon(name: .chevronDown, size: 12)
+                .foregroundStyle(DS.Color.ink4)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 14)
+        .padding(.bottom, 12)
+    }
+
+    private var composeButton: some View {
+        Button { appState.isShowingCompose = true } label: {
+            HStack(spacing: 7) {
+                DSIcon(name: .pencil, size: 12)
+                    .foregroundStyle(DS.Color.ink2)
+                Text(appState.strings.compose)
+                    .font(DS.Font.sans(12, weight: .medium))
+                    .foregroundStyle(DS.Color.ink)
+                Spacer()
+                Kbd(text: "C")
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .background(
+                RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
+                    .fill(DS.Color.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
+                    .stroke(DS.Color.lineStrong, lineWidth: DS.Stroke.hairline)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: – Nav
+
+    private var navSection: some View {
+        VStack(spacing: 1) {
+            ForEach(SidebarItem.allCases) { item in
+                NavRow(
+                    icon: item.designIcon,
+                    label: item.title(in: appState.language),
+                    count: appState.messages.filter { $0.sidebarItem == item }.count,
+                    isSelected: appState.selectedSidebarItem == item
+                ) {
+                    appState.selectedSidebarItem = item
+                }
+            }
+        }
+        .padding(.horizontal, 6)
+    }
+
+    // MARK: – Accounts
+
+    private var accountsSection: some View {
+        Section(title: appState.strings.accountsSection) {
+            VStack(spacing: 1) {
+                ForEach(appState.accounts.isEmpty ? Self.placeholderAccounts : appState.accounts) { acc in
+                    AccountRow(
+                        name: acc.displayName.isEmpty ? acc.emailAddress : acc.displayName,
+                        unread: 0,
+                        color: ProviderPalette.color(for: acc.providerType)
+                    )
+                }
+                if appState.accounts.isEmpty {
+                    EmptyHint(text: appState.strings.noAccountsTitle)
+                }
+            }
+            .padding(.horizontal, 6)
+        }
+    }
+
+    private static let placeholderAccounts: [MailAccount] = []
+
+    // MARK: – Labels
+
+    private var labelsSection: some View {
+        Section(title: appState.strings.labelsSection) {
+            VStack(spacing: 1) {
+                ForEach(Self.labels) { label in
+                    LabelRow(name: label.name, color: label.color)
+                }
+            }
+            .padding(.horizontal, 6)
+        }
+    }
+
+    struct LabelToken: Identifiable {
+        let id: String
+        let name: String
+        let color: Color
+    }
+
+    static let labels: [LabelToken] = [
+        .init(id: "work",    name: "工作", color: DS.Color.labelWork),
+        .init(id: "receipt", name: "收据", color: DS.Color.labelReceipt),
+        .init(id: "travel",  name: "差旅", color: DS.Color.labelTravel),
+        .init(id: "team",    name: "团队", color: DS.Color.labelTeam),
+        .init(id: "client",  name: "客户", color: DS.Color.labelClient)
+    ]
+
+    // MARK: – User footer
+
+    private var userFooter: some View {
+        HStack(spacing: 8) {
+            ZStack {
+                RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
+                    .fill(LinearGradient(
+                        colors: [DS.Color.accentSoft, DS.Color.selectedStr],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    ))
+                    .frame(width: 24, height: 24)
+                Text("JC")
+                    .font(DS.Font.sans(10, weight: .bold))
+                    .foregroundStyle(DS.Color.accentInk)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Joey Chen")
+                    .font(DS.Font.sans(11.5, weight: .semibold))
+                    .foregroundStyle(DS.Color.ink)
+                HStack(spacing: 4) {
+                    Circle().fill(DS.Color.green).frame(width: 4, height: 4)
+                    Text("\(appState.accounts.count) \(appState.strings.accountsSection)")
+                        .font(DS.Font.sans(10))
+                        .foregroundStyle(DS.Color.ink4)
+                }
+            }
+            Spacer(minLength: 0)
+            SettingsLink {
+                DSIcon(name: .settings, size: 13)
+                    .foregroundStyle(DS.Color.ink3)
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            Rectangle()
+                .fill(DS.Color.surface2)
+                .overlay(alignment: .top) {
+                    Rectangle().fill(DS.Color.line).frame(height: 1)
+                }
+        )
     }
 }
 
-private struct SidebarFootnoteRow: View {
+// MARK: - Sub views
+
+private struct Section<Content: View>: View {
     let title: String
-    let systemImage: String
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Text(title.uppercased())
+                    .font(DS.Font.sans(10, weight: .semibold))
+                    .tracking(0.6)
+                    .foregroundStyle(DS.Color.ink4)
+                Spacer()
+                Button {} label: {
+                    DSIcon(name: .plus, size: 11)
+                        .foregroundStyle(DS.Color.ink4)
+                        .frame(width: 14, height: 14)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 16)
+            .padding(.bottom, 5)
+
+            content()
+        }
+    }
+}
+
+private struct NavRow: View {
+    let icon: DSIconName
+    let label: String
+    let count: Int
+    let isSelected: Bool
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                DSIcon(name: icon, size: 13)
+                    .foregroundStyle(isSelected ? DS.Color.accent : DS.Color.ink3)
+                Text(label)
+                    .font(DS.Font.sans(12, weight: isSelected ? .semibold : .medium))
+                    .foregroundStyle(isSelected ? DS.Color.ink : DS.Color.ink2)
+                Spacer()
+                if count > 0 {
+                    Text("\(count)")
+                        .font(DS.Font.mono(10, weight: .semibold))
+                        .foregroundStyle(isSelected ? DS.Color.accent : DS.Color.ink4)
+                }
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 26)
+            .background(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(isSelected ? DS.Color.selected : (isHovered ? DS.Color.hover : .clear))
+            )
+            .overlay(alignment: .leading) {
+                if isSelected {
+                    Rectangle()
+                        .fill(DS.Color.accent)
+                        .frame(width: 2, height: 14)
+                        .clipShape(RoundedRectangle(cornerRadius: 1, style: .continuous))
+                        .offset(x: -6)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+    }
+}
+
+private struct AccountRow: View {
+    let name: String
+    let unread: Int
+    let color: Color
+    @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 9) {
-            Image(systemName: systemImage)
-                .frame(width: 15)
-            Text(title)
-                .font(.system(size: 12, weight: .medium))
+            ProviderDot(color: color, size: 7, haloed: true)
+            Text(name)
+                .font(DS.Font.sans(12, weight: .medium))
+                .foregroundStyle(DS.Color.ink2)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer()
+            if unread > 0 {
+                Text("\(unread)")
+                    .font(DS.Font.mono(10))
+                    .foregroundStyle(DS.Color.ink4)
+            }
+        }
+        .padding(.horizontal, 9)
+        .frame(height: 26)
+        .background(
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(isHovered ? DS.Color.hover : .clear)
+        )
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+    }
+}
+
+private struct LabelRow: View {
+    let name: String
+    let color: Color
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 9) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(color)
+                .frame(width: 8, height: 8)
+            Text(name)
+                .font(DS.Font.sans(12, weight: .medium))
+                .foregroundStyle(DS.Color.ink2)
             Spacer()
         }
-        .foregroundStyle(AppTheme.textTertiary)
+        .padding(.horizontal, 9)
+        .frame(height: 26)
+        .background(
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(isHovered ? DS.Color.hover : .clear)
+        )
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+    }
+}
+
+private struct EmptyHint: View {
+    let text: String
+    var body: some View {
+        Text(text)
+            .font(DS.Font.sans(11))
+            .foregroundStyle(DS.Color.ink4)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Design icon mapping
+
+private extension SidebarItem {
+    var designIcon: DSIconName {
+        switch self {
+        case .allMail:  return .inbox
+        case .priority: return .flame
+        case .drafts:   return .draft
+        case .sent:     return .send
+        case .trash:    return .trash
+        }
     }
 }

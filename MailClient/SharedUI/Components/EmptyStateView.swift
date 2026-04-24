@@ -6,21 +6,19 @@ struct EmptyStateView: View {
     let message: String
 
     var body: some View {
-        VStack(spacing: 9) {
+        VStack(spacing: 10) {
             Image(systemName: systemImage)
-                .font(.system(size: 21, weight: .medium))
-                .foregroundStyle(AppTheme.textTertiary)
-
+                .font(.system(size: 22, weight: .regular))
+                .foregroundStyle(DS.Color.ink4)
             Text(title)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(AppTheme.textPrimary)
-
+                .font(DS.Font.sans(13, weight: .semibold))
+                .foregroundStyle(DS.Color.ink)
             Text(message)
-                .font(.system(size: 12))
-                .foregroundStyle(AppTheme.textSecondary)
+                .font(DS.Font.sans(12))
+                .foregroundStyle(DS.Color.ink3)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 280)
+                .frame(maxWidth: 320)
         }
-        .padding(18)
+        .padding(24)
     }
 }

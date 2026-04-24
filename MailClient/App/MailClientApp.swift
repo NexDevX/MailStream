@@ -13,7 +13,7 @@ struct MailClientApp: App {
         WindowGroup(appState.strings.appName) {
             RootView()
                 .environmentObject(appState)
-                .frame(minWidth: 940, minHeight: 640)
+                .frame(minWidth: 1040, minHeight: 680)
                 .task {
                     await appState.bootstrap()
                 }
@@ -23,9 +23,7 @@ struct MailClientApp: App {
         .commands {
             CommandMenu(appState.strings.mailboxMenu) {
                 Button(appState.strings.refresh) {
-                    Task {
-                        await appState.refreshMailbox()
-                    }
+                    Task { await appState.refreshMailbox() }
                 }
                 .keyboardShortcut("r")
 
@@ -33,6 +31,11 @@ struct MailClientApp: App {
                     appState.isShowingCompose = true
                 }
                 .keyboardShortcut("n")
+
+                Button(appState.strings.commandPalette) {
+                    appState.isShowingCommandPalette.toggle()
+                }
+                .keyboardShortcut("k", modifiers: .command)
             }
         }
 

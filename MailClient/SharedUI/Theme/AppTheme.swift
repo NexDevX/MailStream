@@ -1,40 +1,43 @@
 import SwiftUI
 
+/// Compatibility shim — the canonical tokens live in `DS`.
+/// Kept so that legacy call sites (e.g. Settings) keep compiling while the
+/// codebase migrates to `DS.Color` / `DS.Font`.
 enum AppTheme {
-    static let canvas = Color(red: 0.948, green: 0.955, blue: 0.963)
-    static let panel = Color(red: 0.984, green: 0.986, blue: 0.989)
-    static let panelElevated = Color.white
-    static let panelMuted = Color(red: 0.936, green: 0.945, blue: 0.955)
-    static let panelBorder = Color(red: 0.67, green: 0.70, blue: 0.74).opacity(0.32)
-    static let chrome = Color(red: 0.204, green: 0.200, blue: 0.190)
-    static let chromeText = Color(red: 0.926, green: 0.926, blue: 0.910)
-    static let chromeMuted = Color.white.opacity(0.58)
-    static let chromeField = Color.white.opacity(0.08)
-    static let chromeFieldBorder = Color.white.opacity(0.12)
-    static let textPrimary = Color(red: 0.086, green: 0.094, blue: 0.106)
-    static let textSecondary = Color(red: 0.355, green: 0.382, blue: 0.421)
-    static let textTertiary = Color(red: 0.545, green: 0.574, blue: 0.615)
-    static let accent = Color(red: 0.098, green: 0.129, blue: 0.176)
-    static let focusAccent = Color(red: 0.176, green: 0.333, blue: 0.682)
-    static let priorityAccent = Color(red: 0.818, green: 0.447, blue: 0.114)
-    static let destructive = Color(red: 0.700, green: 0.160, blue: 0.130)
-    static let success = Color(red: 0.082, green: 0.508, blue: 0.337)
-    static let successBright = Color(red: 0.050, green: 0.740, blue: 0.460)
-    static let successSurface = Color(red: 0.875, green: 0.969, blue: 0.929)
-    static let info = Color(red: 0.150, green: 0.450, blue: 0.950)
-    static let selectedCard = Color(red: 0.965, green: 0.976, blue: 0.992)
-    static let softIconSurface = Color(red: 0.935, green: 0.939, blue: 0.984)
+    static var canvas: Color         { DS.Color.bg }
+    static var panel: Color          { DS.Color.surface2 }
+    static var panelElevated: Color  { DS.Color.surface }
+    static var panelMuted: Color     { DS.Color.surface3 }
+    static var panelBorder: Color    { DS.Color.line }
+    static var chrome: Color         { DS.Color.chromeTop }
+    static var chromeText: Color     { DS.Color.ink }
+    static var chromeMuted: Color    { DS.Color.ink3 }
+    static var chromeField: Color    { DS.Color.surface3 }
+    static var chromeFieldBorder: Color { DS.Color.line }
+    static var textPrimary: Color    { DS.Color.ink }
+    static var textSecondary: Color  { DS.Color.ink2 }
+    static var textTertiary: Color   { DS.Color.ink3 }
+    static var accent: Color         { DS.Color.accent }
+    static var focusAccent: Color    { DS.Color.accent }
+    static var priorityAccent: Color { DS.Color.amber }
+    static var destructive: Color    { DS.Color.red }
+    static var success: Color        { DS.Color.green }
+    static var successBright: Color  { DS.Color.green }
+    static var successSurface: Color { DS.Color.greenSoft }
+    static var info: Color           { DS.Color.accent }
+    static var selectedCard: Color   { DS.Color.selected }
+    static var softIconSurface: Color { DS.Color.accentSoft }
 
-    static let providerQQ = Color(red: 0.120, green: 0.330, blue: 0.910)
-    static let providerGmail = Color(red: 0.960, green: 0.270, blue: 0.240)
-    static let providerOutlook = Color(red: 0.170, green: 0.390, blue: 0.880)
-    static let providerICloud = Color(red: 0.290, green: 0.350, blue: 0.440)
-    static let providerCustom = Color(red: 0.580, green: 0.380, blue: 0.820)
+    static var providerQQ: Color      { DS.Color.pQQ }
+    static var providerGmail: Color   { DS.Color.pGmail }
+    static var providerOutlook: Color { DS.Color.pOutlook }
+    static var providerICloud: Color  { DS.Color.pICloud }
+    static var providerCustom: Color  { DS.Color.pCustom }
 
     static let titleFontSize: CGFloat = 18
-    static let sidebarTitleSize: CGFloat = 20
-    static let sectionHeaderSize: CGFloat = 12
-    static let bodyFontSize: CGFloat = 14
+    static let sidebarTitleSize: CGFloat = 16
+    static let sectionHeaderSize: CGFloat = 10
+    static let bodyFontSize: CGFloat = 13
     static let captionSize: CGFloat = 11
 
     struct LayoutMetrics {
@@ -48,38 +51,36 @@ enum AppTheme {
     }
 
     static func layout(for size: CGSize) -> LayoutMetrics {
-        if size.width < 980 {
+        if size.width < 1040 {
             return LayoutMetrics(
-                sidebarWidth: 188,
-                listMinWidth: 270,
-                listIdealWidth: 292,
-                listMaxWidth: 316,
-                detailMinWidth: 430,
-                detailContentWidth: 620,
-                detailHorizontalPadding: 24
+                sidebarWidth: 200,
+                listMinWidth: 360,
+                listIdealWidth: 400,
+                listMaxWidth: 440,
+                detailMinWidth: 460,
+                detailContentWidth: 640,
+                detailHorizontalPadding: 28
             )
         }
-
-        if size.width < 1280 {
+        if size.width < 1360 {
             return LayoutMetrics(
-                sidebarWidth: 210,
-                listMinWidth: 300,
-                listIdealWidth: 326,
-                listMaxWidth: 358,
+                sidebarWidth: 216,
+                listMinWidth: 420,
+                listIdealWidth: 460,
+                listMaxWidth: 500,
                 detailMinWidth: 540,
-                detailContentWidth: 700,
-                detailHorizontalPadding: 34
+                detailContentWidth: 680,
+                detailHorizontalPadding: 36
             )
         }
-
         return LayoutMetrics(
-            sidebarWidth: 224,
-            listMinWidth: 324,
-            listIdealWidth: 352,
-            listMaxWidth: 404,
+            sidebarWidth: 232,
+            listMinWidth: 460,
+            listIdealWidth: 480,
+            listMaxWidth: 520,
             detailMinWidth: 620,
-            detailContentWidth: 760,
-            detailHorizontalPadding: 42
+            detailContentWidth: 680,
+            detailHorizontalPadding: 44
         )
     }
 }

@@ -528,6 +528,23 @@ struct AppStrings {
         }
     }
 
+    var chipAll: String       { language == .simplifiedChinese ? "全部" : "All" }
+    var chipUnread: String    { language == .simplifiedChinese ? "未读" : "Unread" }
+    var chipPriority: String  { language == .simplifiedChinese ? "重要" : "Priority" }
+    var chipAttach: String    { language == .simplifiedChinese ? "附件" : "Attach" }
+    var chipMentions: String  { language == .simplifiedChinese ? "@我"  : "@me" }
+    var sortNewestFirst: String { language == .simplifiedChinese ? "时间倒序" : "Newest first" }
+    var accountsSection: String { language == .simplifiedChinese ? "账号"   : "Accounts" }
+    var labelsSection: String   { language == .simplifiedChinese ? "标签"   : "Labels" }
+    var pinned: String          { language == .simplifiedChinese ? "置顶"   : "Pinned" }
+    var snooze: String          { language == .simplifiedChinese ? "稍后提醒" : "Snooze" }
+    var commandPalette: String  { language == .simplifiedChinese ? "命令面板" : "Command" }
+    var verified: String        { language == .simplifiedChinese ? "已验证"  : "Verified" }
+    var keyDecisionsTitle: String { language == .simplifiedChinese ? "AI 摘要" : "AI summary" }
+    var unreadWord: String      { language == .simplifiedChinese ? "未读"    : "unread" }
+    var messagesUnit: String    { language == .simplifiedChinese ? "封"     : "msgs" }
+    var replyTo: String         { language == .simplifiedChinese ? "回复"   : "Reply to" }
+
     func syncedHoursAgo(_ value: Int) -> String {
         switch language {
         case .english:

@@ -1,5 +1,10 @@
 import Foundation
 
+enum InboxFilterChip: String, CaseIterable, Identifiable {
+    case all, unread, priority, attach, mentions
+    var id: String { rawValue }
+}
+
 @MainActor
 final class AppState: ObservableObject {
     private static let languageDefaultsKey = "mailclient.language"
@@ -16,6 +21,10 @@ final class AppState: ObservableObject {
     @Published var selectedMessageID: MailMessage.ID?
     @Published var searchText = ""
     @Published var isShowingCompose = false
+    @Published var isShowingCommandPalette = false
+    @Published var selectedFilterChip: InboxFilterChip = .all {
+        didSet { syncSelectionIfNeeded() }
+    }
     @Published var language: AppLanguage {
         didSet {
             UserDefaults.standard.set(language.rawValue, forKey: Self.languageDefaultsKey)
@@ -48,7 +57,25 @@ final class AppState: ObservableObject {
     }
 
     var filteredMessages: [MailMessage] {
-        messages.filter(matchesSidebarItem).filter(matchesInboxFilter).filter(matchesSearchText)
+        messages
+            .filter(matchesSidebarItem)
+            .filter(matchesInboxFilter)
+            .filter(matchesFilterChip)
+            .filter(matchesSearchText)
+    }
+
+    var allMessagesCount: Int { messages.filter { $0.sidebarItem == .allMail }.count }
+    var unreadCount: Int { max(1, allMessagesCount / 3) } // UI-layer heuristic until unread is modelled
+
+    func chipCount(_ chip: InboxFilterChip) -> Int {
+        let base = messages.filter(matchesSidebarItem).filter(matchesInboxFilter)
+        switch chip {
+        case .all:       return base.count
+        case .unread:    return max(0, base.count - (base.count / 2))
+        case .priority:  return base.filter(\.isPriority).count
+        case .attach:    return base.filter { $0.preview.contains("附件") || $0.preview.lowercased().contains("attach") }.count
+        case .mentions:  return base.filter { $0.bodyParagraphs.joined().contains("@") }.count
+        }
     }
 
     var selectedMessage: MailMessage? {
@@ -199,6 +226,16 @@ final class AppState: ObservableObject {
             return message.inboxFilter == .focused
         case .archive:
             return message.inboxFilter == .archive
+        }
+    }
+
+    private func matchesFilterChip(_ message: MailMessage) -> Bool {
+        switch selectedFilterChip {
+        case .all:      return true
+        case .unread:   return true // placeholder until unread is modelled
+        case .priority: return message.isPriority
+        case .attach:   return message.preview.lowercased().contains("attach") || message.preview.contains("附件")
+        case .mentions: return message.bodyParagraphs.joined().contains("@")
         }
     }
 
