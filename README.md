@@ -1,4 +1,4 @@
-# MailStrea
+# InboxOne
 
 基于 **SwiftUI + AppKit** 的 macOS 原生邮箱客户端原型。
 
@@ -75,6 +75,8 @@ build/Release/MailStrea.dmg
 
 仓库已经包含 GitHub Actions 工作流：
 
+- `push 任意分支`：自动构建 DMG，上传 Actions artifact，用于验证分支是否可发布
+- `pull_request -> main`：自动构建 DMG，验证合并前状态
 - `push main`：自动构建 DMG，上传 artifact，并更新一个固定的 `latest-main` 预发布下载页
 - `push v* tag`：自动构建 DMG，并发布到 GitHub Releases 供用户下载
 
@@ -84,10 +86,16 @@ build/Release/MailStrea.dmg
 .github/workflows/build-release.yml
 ```
 
+GitHub 仓库需要确认：
+
+1. `Settings -> Actions -> General -> Workflow permissions` 选择 `Read and write permissions`
+2. 允许 GitHub Actions 创建和更新 Releases
+3. 仓库至少有一个 `main` 分支后，再把 `main` 设为默认分支
+
 最小发布闭环建议：
 
-1. 开发完成后推送到 `main`
-2. 用户先从 `latest-main` 预发布页或本次 Actions artifact 下载测试包
+1. 先推送功能分支，等 Actions 构建通过
+2. 合并到 `main` 后，从 `latest-main` 预发布页或本次 Actions artifact 下载测试包
 3. 需要正式版本时，再创建版本标签并推送
 
 示例：
