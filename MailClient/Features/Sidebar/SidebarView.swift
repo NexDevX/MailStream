@@ -55,7 +55,7 @@ struct SidebarView: View {
     }
 
     private var composeButton: some View {
-        Button { appState.isShowingCompose = true } label: {
+        Button { appState.openCompose() } label: {
             HStack(spacing: 7) {
                 DSIcon(name: .pencil, size: 12)
                     .foregroundStyle(DS.Color.ink2)
@@ -173,7 +173,9 @@ struct SidebarView: View {
                 }
             }
             Spacer(minLength: 0)
-            SettingsLink {
+            Button {
+                appState.route = .settings
+            } label: {
                 DSIcon(name: .settings, size: 13)
                     .foregroundStyle(DS.Color.ink3)
                     .frame(width: 24, height: 24)

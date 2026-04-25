@@ -36,12 +36,14 @@ struct MailClientApp: App {
                     appState.isShowingCommandPalette.toggle()
                 }
                 .keyboardShortcut("k", modifiers: .command)
-            }
-        }
 
-        Settings {
-            SettingsView()
-                .environmentObject(appState)
+                Divider()
+
+                Button(appState.strings.settings) {
+                    appState.route = .settings
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
         }
     }
 }

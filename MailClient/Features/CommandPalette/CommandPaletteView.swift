@@ -54,10 +54,13 @@ struct CommandPaletteView: View {
             VStack(alignment: .leading, spacing: 0) {
                 group(title: "建议") {
                     row(icon: .pencil, label: appState.strings.compose, kbd: ["C"], highlighted: true) {
-                        appState.isShowingCompose = true
+                        appState.openCompose()
                         dismiss()
                     }
-                    row(icon: .search, label: "搜索所有账号的邮件…", kbd: ["⌘", "⇧F"]) { dismiss() }
+                    row(icon: .search, label: appState.language == .simplifiedChinese ? "搜索所有账号的邮件…" : "Search all accounts…", kbd: ["⌘", "⇧F"]) {
+                        appState.route = .search
+                        dismiss()
+                    }
                     row(icon: .refresh, label: "同步全部账号", kbd: ["⌘", "R"]) {
                         Task { await appState.refreshMailbox() }
                         dismiss()

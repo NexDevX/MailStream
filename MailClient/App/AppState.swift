@@ -5,6 +5,52 @@ enum InboxFilterChip: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum AppRoute: Hashable {
+    case mail
+    case onboarding
+    case accountWizard
+    case settings
+    case search
+    case compose
+}
+
+struct ComposeDraft: Identifiable, Equatable {
+    let id: UUID
+    var title: String
+    var to: String
+    var cc: String
+    var bcc: String
+    var subject: String
+    var body: String
+    var fromAccountID: MailAccount.ID?
+    var showCcBcc: Bool
+    var lastSavedAt: Date
+
+    init(
+        id: UUID = UUID(),
+        title: String = "",
+        to: String = "",
+        cc: String = "",
+        bcc: String = "",
+        subject: String = "",
+        body: String = "",
+        fromAccountID: MailAccount.ID? = nil,
+        showCcBcc: Bool = false,
+        lastSavedAt: Date = Date()
+    ) {
+        self.id = id
+        self.title = title
+        self.to = to
+        self.cc = cc
+        self.bcc = bcc
+        self.subject = subject
+        self.body = body
+        self.fromAccountID = fromAccountID
+        self.showCcBcc = showCcBcc
+        self.lastSavedAt = lastSavedAt
+    }
+}
+
 @MainActor
 final class AppState: ObservableObject {
     private static let languageDefaultsKey = "mailclient.language"
@@ -22,6 +68,10 @@ final class AppState: ObservableObject {
     @Published var searchText = ""
     @Published var isShowingCompose = false
     @Published var isShowingCommandPalette = false
+    @Published var route: AppRoute = .mail
+    @Published var pendingWizardProvider: MailProviderType = .gmail
+    @Published var composeDrafts: [ComposeDraft] = []
+    @Published var activeDraftID: ComposeDraft.ID?
     @Published var selectedFilterChip: InboxFilterChip = .all {
         didSet { syncSelectionIfNeeded() }
     }
@@ -181,6 +231,43 @@ final class AppState: ObservableObject {
             try await syncService.removeAccount(id: account.id)
             await reloadAccounts()
             mailboxStatusMessage = strings.accountRemoved
+        } catch {
+            mailboxStatusMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Compose tabs
+
+    func openCompose(prefill: ComposeDraft? = nil) {
+        let draft = prefill ?? ComposeDraft(fromAccountID: selectedAccountID ?? accounts.first?.id)
+        if composeDrafts.contains(where: { $0.id == draft.id }) == false {
+            composeDrafts.append(draft)
+        }
+        activeDraftID = draft.id
+        route = .compose
+    }
+
+    func closeCompose(_ id: ComposeDraft.ID) {
+        composeDrafts.removeAll { $0.id == id }
+        if activeDraftID == id {
+            activeDraftID = composeDrafts.last?.id
+        }
+        if composeDrafts.isEmpty {
+            route = .mail
+        }
+    }
+
+    func updateDraft(_ id: ComposeDraft.ID, _ mutator: (inout ComposeDraft) -> Void) {
+        guard let index = composeDrafts.firstIndex(where: { $0.id == id }) else { return }
+        mutator(&composeDrafts[index])
+        composeDrafts[index].lastSavedAt = Date()
+    }
+
+    func sendDraft(_ id: ComposeDraft.ID) async {
+        guard let draft = composeDrafts.first(where: { $0.id == id }) else { return }
+        do {
+            try await sendMail(to: draft.to, subject: draft.subject, body: draft.body)
+            closeCompose(id)
         } catch {
             mailboxStatusMessage = error.localizedDescription
         }

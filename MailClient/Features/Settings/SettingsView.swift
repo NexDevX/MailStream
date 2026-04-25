@@ -1,624 +1,520 @@
 import SwiftUI
 
+/// Inline settings surface — replaces the old `Settings { }` popup.
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
     @AppStorage("mailclient.notifications.enabled") private var notificationsEnabled = true
     @AppStorage("mailclient.desktop.badges") private var badgesEnabled = true
     @AppStorage("mailclient.links.external") private var openLinksExternally = true
 
-    @State private var providerType: MailProviderType = .qq
-    @State private var accountName = ""
-    @State private var emailAddress = ""
-    @State private var secret = ""
-    @State private var accountSearchText = ""
-    @State private var isShowingAccountSetup = false
+    @State private var selectedSection: Section = .accounts
+    @State private var expandedAccountID: MailAccount.ID?
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 220, maximum: 292), spacing: 14)
-    ]
-
-    private var filteredAccounts: [MailAccount] {
-        guard accountSearchText.isEmpty == false else {
-            return appState.accounts
-        }
-
-        let query = accountSearchText.lowercased()
-        return appState.accounts.filter {
-            $0.displayName.lowercased().contains(query)
-                || $0.emailAddress.lowercased().contains(query)
-                || $0.providerType.displayName(language: appState.language).lowercased().contains(query)
-        }
-    }
-
-    private var connectButtonDisabled: Bool {
-        let trimmedEmail = emailAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedSecret = secret.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedEmail.isEmpty
-            || trimmedSecret.isEmpty
-            || appState.isProviderAvailable(providerType) == false
+    enum Section: String, CaseIterable, Identifiable {
+        case accounts, general, appearance, shortcuts, about
+        var id: String { rawValue }
     }
 
     var body: some View {
+        HStack(spacing: 0) {
+            sidebar
+            Divider().overlay(DS.Color.line)
+            detail
+        }
+        .background(DS.Color.bg)
+    }
+
+    // MARK: – Sidebar
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Button {
+                    appState.route = .mail
+                } label: {
+                    DSIcon(name: .chevronLeft, size: 12)
+                        .foregroundStyle(DS.Color.ink3)
+                        .frame(width: 22, height: 22)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(DS.Color.surface)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
+                        )
+                }
+                .buttonStyle(.plain)
+                Text(appState.strings.settings)
+                    .font(DS.Font.sans(14, weight: .semibold))
+                    .foregroundStyle(DS.Color.ink)
+                Spacer()
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Section.allCases) { section in
+                    sectionRow(section)
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 18)
+        .frame(width: 220)
+        .background(DS.Color.surface2)
+    }
+
+    private func sectionRow(_ section: Section) -> some View {
+        let isSelected = section == selectedSection
+        return Button {
+            selectedSection = section
+        } label: {
+            HStack(spacing: 9) {
+                DSIcon(name: icon(for: section), size: 13)
+                    .foregroundStyle(isSelected ? DS.Color.accent : DS.Color.ink3)
+                Text(label(for: section))
+                    .font(DS.Font.sans(12, weight: isSelected ? .semibold : .medium))
+                    .foregroundStyle(isSelected ? DS.Color.ink : DS.Color.ink2)
+                Spacer()
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 28)
+            .background(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(isSelected ? DS.Color.selected : .clear)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func icon(for section: Section) -> DSIconName {
+        switch section {
+        case .accounts:   return .at
+        case .general:    return .settings
+        case .appearance: return .sun
+        case .shortcuts:  return .command
+        case .about:      return .help
+        }
+    }
+
+    private func label(for section: Section) -> String {
+        let zh = appState.language == .simplifiedChinese
+        switch section {
+        case .accounts:   return zh ? "账号" : "Accounts"
+        case .general:    return zh ? "通用" : "General"
+        case .appearance: return zh ? "外观" : "Appearance"
+        case .shortcuts:  return zh ? "快捷键" : "Shortcuts"
+        case .about:      return zh ? "关于" : "About"
+        }
+    }
+
+    // MARK: – Detail
+
+    @ViewBuilder
+    private var detail: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                header
-                accountsGrid
-
-                if isShowingAccountSetup || appState.accounts.isEmpty {
-                    addAccountPanel
+                switch selectedSection {
+                case .accounts:   accountsPanel
+                case .general:    generalPanel
+                case .appearance: appearancePanel
+                case .shortcuts:  shortcutsPanel
+                case .about:      aboutPanel
                 }
-
-                preferencesPanel
             }
-            .padding(22)
+            .padding(28)
+            .frame(maxWidth: 780, alignment: .leading)
         }
-        .frame(width: 840, height: 640)
-        .background(AppTheme.panel)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 14) {
-                searchField
-                Spacer(minLength: 0)
+    // MARK: Accounts
+
+    private var accountsPanel: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(appState.language == .simplifiedChinese ? "邮箱账号" : "Email accounts")
+                        .font(DS.Font.sans(20, weight: .semibold))
+                        .foregroundStyle(DS.Color.ink)
+                    Text(appState.language == .simplifiedChinese
+                         ? "集中管理所有已接入的邮箱，支持随时暂停或重新授权。"
+                         : "Manage every connected mailbox. Pause or re-authorize at any time.")
+                        .font(DS.Font.sans(12))
+                        .foregroundStyle(DS.Color.ink3)
+                }
+                Spacer()
+                Button {
+                    appState.route = .accountWizard
+                } label: {
+                    HStack(spacing: 5) {
+                        DSIcon(name: .plus, size: 11, weight: .semibold)
+                        Text(appState.language == .simplifiedChinese ? "添加账号" : "Add account")
+                            .font(DS.Font.sans(12, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .frame(height: 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
+                            .fill(DS.Color.accent)
+                    )
+                }
+                .buttonStyle(.plain)
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(appState.strings.connectedAccounts)
-                    .font(.system(size: 32, weight: .semibold))
-                    .foregroundStyle(AppTheme.textPrimary)
-
-                Text(appState.strings.connectedAccountsSubtitle)
-                    .font(.system(size: 14))
-                    .foregroundStyle(AppTheme.textSecondary)
+            if let status = appState.mailboxStatusMessage {
+                Text(status)
+                    .font(DS.Font.sans(11.5))
+                    .foregroundStyle(DS.Color.ink3)
             }
 
-            if let mailboxStatusMessage = appState.mailboxStatusMessage {
-                Text(mailboxStatusMessage)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppTheme.textSecondary)
-            }
-        }
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(AppTheme.textTertiary)
-
-            TextField(appState.strings.searchAccounts, text: $accountSearchText)
-                .textFieldStyle(.plain)
-        }
-        .font(.system(size: 13))
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .frame(maxWidth: 320)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(AppTheme.panelMuted.opacity(0.72))
-        )
-    }
-
-    private var accountsGrid: some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
-            if filteredAccounts.isEmpty {
+            if appState.accounts.isEmpty {
                 EmptyStateView(
                     title: appState.strings.noAccountsTitle,
                     systemImage: "tray.2",
                     message: appState.strings.noAccountsMessage
                 )
-                .frame(maxWidth: .infinity, minHeight: 160)
+                .frame(maxWidth: .infinity, minHeight: 180)
                 .background(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(AppTheme.panelElevated)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(DS.Color.surface)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .stroke(AppTheme.panelBorder, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
                 )
             } else {
-                ForEach(filteredAccounts) { account in
-                    AccountCardView(account: account)
-                        .environmentObject(appState)
-                }
-            }
-
-            AddAccountCardView(isExpanded: isShowingAccountSetup) {
-                isShowingAccountSetup = true
-            }
-            .environmentObject(appState)
-        }
-    }
-
-    private var addAccountPanel: some View {
-        HStack(alignment: .top, spacing: 18) {
-            VStack(alignment: .leading, spacing: 14) {
-                Text(appState.strings.accountSetup)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(AppTheme.textPrimary)
-
-                Text(appState.strings.plannedProviderHint)
-                    .font(.system(size: 13))
-                    .foregroundStyle(AppTheme.textSecondary)
-
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 128, maximum: 150), spacing: 10)], spacing: 10) {
-                    ForEach(MailProviderType.allCases) { provider in
-                        ProviderOptionCardView(
-                            provider: provider,
-                            isSelected: provider == providerType,
-                            isAvailable: appState.isProviderAvailable(provider)
-                        ) {
-                            providerType = provider
-                        }
-                    }
-                }
-            }
-            .frame(maxWidth: 310, alignment: .leading)
-
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(appState.strings.connectNewAccount)
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(AppTheme.textPrimary)
-
-                        Text(appState.strings.selectService)
-                            .font(.system(size: 13))
-                            .foregroundStyle(AppTheme.textSecondary)
-                    }
-
-                    Spacer()
-
-                    providerBadge(providerType)
-                }
-
-                HStack(spacing: 10) {
-                    Image(systemName: providerType.systemImageName)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(providerTint(for: providerType))
-                        .frame(width: 32, height: 32)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(providerTint(for: providerType).opacity(0.12))
-                        )
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(providerType.displayName(language: appState.language))
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(AppTheme.textPrimary)
-
-                        Text(appState.isProviderAvailable(providerType) ? appState.strings.availableNow : appState.strings.comingSoon)
-                            .font(.system(size: 12))
-                            .foregroundStyle(AppTheme.textSecondary)
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    SettingsFieldLabel(title: appState.strings.accountName)
-                    TextField(appState.strings.accountNamePlaceholder, text: $accountName)
-                        .textFieldStyle(AccountSettingsTextFieldStyle())
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    SettingsFieldLabel(title: appState.strings.emailAddress)
-                    TextField(appState.strings.emailAddress, text: $emailAddress)
-                        .textFieldStyle(AccountSettingsTextFieldStyle())
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    SettingsFieldLabel(title: appState.strings.accountSecret)
-                    SecureField(appState.strings.accountSecret, text: $secret)
-                        .textFieldStyle(AccountSettingsTextFieldStyle())
-                }
-
-                HStack(spacing: 12) {
-                    Button(appState.strings.saveAndConnect) {
-                        Task {
-                            await appState.connectAccount(
-                                providerType: providerType,
-                                displayName: accountName,
-                                emailAddress: emailAddress,
-                                secret: secret
-                            )
-
-                            if appState.isProviderAvailable(providerType) {
-                                accountName = ""
-                                emailAddress = ""
-                                secret = ""
-                                isShowingAccountSetup = false
+                VStack(spacing: 0) {
+                    ForEach(Array(appState.accounts.enumerated()), id: \.element.id) { index, account in
+                        AccountListRow(
+                            account: account,
+                            isExpanded: expandedAccountID == account.id,
+                            onToggle: {
+                                expandedAccountID = expandedAccountID == account.id ? nil : account.id
+                            },
+                            onRemove: {
+                                Task { await appState.removeAccount(account) }
                             }
+                        )
+                        if index < appState.accounts.count - 1 {
+                            Divider().overlay(DS.Color.line)
                         }
                     }
-                    .buttonStyle(MailStreaPrimaryButtonStyle())
-                    .frame(width: 172)
-                    .disabled(connectButtonDisabled)
-
-                    Spacer()
-
-                    Button(appState.strings.syncNow) {
-                        Task {
-                            await appState.refreshMailbox()
-                        }
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(appState.activeAccounts.isEmpty || appState.isRefreshingMailbox)
                 }
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(DS.Color.surface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
+                )
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(AppTheme.panelElevated)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(AppTheme.panelBorder, lineWidth: 1)
-        )
     }
 
-    private var preferencesPanel: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(appState.strings.languageSection)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(AppTheme.textPrimary)
+    // MARK: General
 
-                Picker(appState.strings.displayLanguage, selection: $appState.language) {
-                    ForEach(AppLanguage.allCases) { language in
-                        Text(language.displayName).tag(language)
+    private var generalPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            panelHeading(title: appState.language == .simplifiedChinese ? "通用" : "General",
+                         subtitle: appState.language == .simplifiedChinese ? "调整基础行为。" : "Tune baseline behaviors.")
+            card {
+                settingRow(label: appState.strings.displayLanguage) {
+                    Picker("", selection: $appState.language) {
+                        ForEach(AppLanguage.allCases) { Text($0.displayName).tag($0) }
                     }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(width: 160)
                 }
-                .pickerStyle(.menu)
+                Divider().overlay(DS.Color.line)
+                toggleRow(label: appState.strings.enableNotifications, value: $notificationsEnabled)
+                Divider().overlay(DS.Color.line)
+                toggleRow(label: appState.strings.showDockBadge, value: $badgesEnabled)
+                Divider().overlay(DS.Color.line)
+                toggleRow(label: appState.strings.openLinksInBrowser, value: $openLinksExternally)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text(appState.strings.general)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(AppTheme.textPrimary)
-
-                Toggle(appState.strings.enableNotifications, isOn: $notificationsEnabled)
-                Toggle(appState.strings.showDockBadge, isOn: $badgesEnabled)
-                Toggle(appState.strings.openLinksInBrowser, isOn: $openLinksExternally)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(AppTheme.panelElevated)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(AppTheme.panelBorder, lineWidth: 1)
-        )
+    }
+
+    // MARK: Appearance
+
+    private var appearancePanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            panelHeading(title: appState.language == .simplifiedChinese ? "外观" : "Appearance",
+                         subtitle: appState.language == .simplifiedChinese ? "界面跟随系统主题。" : "UI follows the system theme.")
+            card {
+                settingRow(label: appState.language == .simplifiedChinese ? "主题" : "Theme") {
+                    Text(appState.language == .simplifiedChinese ? "跟随系统" : "System")
+                        .font(DS.Font.sans(12))
+                        .foregroundStyle(DS.Color.ink3)
+                }
+            }
+        }
+    }
+
+    // MARK: Shortcuts
+
+    private var shortcutsPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            panelHeading(title: appState.language == .simplifiedChinese ? "快捷键" : "Shortcuts",
+                         subtitle: appState.language == .simplifiedChinese ? "MailStream 面向键盘用户设计。" : "MailStream is keyboard-first.")
+            card {
+                shortcutRow(label: appState.strings.compose, keys: ["⌘", "N"])
+                Divider().overlay(DS.Color.line)
+                shortcutRow(label: appState.strings.refresh, keys: ["⌘", "R"])
+                Divider().overlay(DS.Color.line)
+                shortcutRow(label: appState.strings.commandPalette, keys: ["⌘", "K"])
+                Divider().overlay(DS.Color.line)
+                shortcutRow(label: appState.strings.settings, keys: ["⌘", ","])
+            }
+        }
+    }
+
+    // MARK: About
+
+    private var aboutPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            panelHeading(title: "MailStream",
+                         subtitle: appState.language == .simplifiedChinese ? "版本 0.1 · 面向专业用户的桌面邮箱客户端" : "v0.1 · a desktop mail client for professionals")
+            card {
+                settingRow(label: appState.language == .simplifiedChinese ? "版本" : "Version") {
+                    Text("0.1.0").font(DS.Font.mono(11)).foregroundStyle(DS.Color.ink3)
+                }
+                Divider().overlay(DS.Color.line)
+                settingRow(label: appState.language == .simplifiedChinese ? "官网" : "Website") {
+                    Text("mailstream.app").font(DS.Font.mono(11)).foregroundStyle(DS.Color.accent)
+                }
+            }
+        }
+    }
+
+    // MARK: Helpers
+
+    private func panelHeading(title: String, subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(DS.Font.sans(20, weight: .semibold))
+                .foregroundStyle(DS.Color.ink)
+            Text(subtitle)
+                .font(DS.Font.sans(12))
+                .foregroundStyle(DS.Color.ink3)
+        }
     }
 
     @ViewBuilder
-    private func providerBadge(_ provider: MailProviderType) -> some View {
-        let isAvailable = appState.isProviderAvailable(provider)
-        Text(isAvailable ? appState.strings.liveConnector : appState.strings.comingSoon)
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(isAvailable ? AppTheme.success : AppTheme.textSecondary)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
+    private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(spacing: 0) { content() }
             .background(
-                Capsule(style: .continuous)
-                    .fill(isAvailable ? AppTheme.successSurface : AppTheme.panelMuted.opacity(0.82))
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(DS.Color.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
             )
     }
 
-    private func providerTint(for provider: MailProviderType) -> Color {
-        switch provider {
-        case .qq:
-            return AppTheme.providerQQ
-        case .gmail:
-            return AppTheme.providerGmail
-        case .outlook:
-            return AppTheme.providerOutlook
-        case .icloud:
-            return AppTheme.providerICloud
-        case .customIMAPSMTP:
-            return AppTheme.providerCustom
+    private func settingRow<Trailing: View>(label: String, @ViewBuilder trailing: () -> Trailing) -> some View {
+        HStack {
+            Text(label)
+                .font(DS.Font.sans(12.5, weight: .medium))
+                .foregroundStyle(DS.Color.ink)
+            Spacer()
+            trailing()
         }
+        .padding(.horizontal, 14)
+        .frame(height: 42)
+    }
+
+    private func toggleRow(label: String, value: Binding<Bool>) -> some View {
+        HStack {
+            Text(label)
+                .font(DS.Font.sans(12.5, weight: .medium))
+                .foregroundStyle(DS.Color.ink)
+            Spacer()
+            Toggle("", isOn: value).labelsHidden().toggleStyle(.switch).controlSize(.small)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 42)
+    }
+
+    private func shortcutRow(label: String, keys: [String]) -> some View {
+        HStack {
+            Text(label)
+                .font(DS.Font.sans(12.5, weight: .medium))
+                .foregroundStyle(DS.Color.ink)
+            Spacer()
+            HStack(spacing: 3) {
+                ForEach(keys, id: \.self) { Kbd(text: $0) }
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 42)
     }
 }
 
-private struct AccountCardView: View {
-    @EnvironmentObject private var appState: AppState
+// MARK: - Account row
 
+private struct AccountListRow: View {
+    @EnvironmentObject private var appState: AppState
     let account: MailAccount
+    let isExpanded: Bool
+    let onToggle: () -> Void
+    let onRemove: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(providerTint.opacity(0.15))
-                        .frame(width: 38, height: 38)
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Avatar(
+                    initials: String((account.displayName.isEmpty ? account.emailAddress : account.displayName).prefix(2)),
+                    size: 34,
+                    providerColor: ProviderPalette.color(for: account.providerType)
+                )
 
-                    Image(systemName: account.providerType.systemImageName)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(providerTint)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 7) {
+                        Text(account.displayName.isEmpty ? account.emailAddress : account.displayName)
+                            .font(DS.Font.sans(13, weight: .semibold))
+                            .foregroundStyle(DS.Color.ink)
+                        statusBadge
+                    }
+                    Text(account.emailAddress)
+                        .font(DS.Font.mono(11))
+                        .foregroundStyle(DS.Color.ink3)
                 }
 
                 Spacer()
 
-                Button {
-                    Task {
-                        await appState.removeAccount(account)
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(AppTheme.textTertiary)
-                        .frame(width: 26, height: 26)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(syncText)
+                        .font(DS.Font.sans(11))
+                        .foregroundStyle(DS.Color.ink3)
+                    Text(account.providerType.displayName(language: appState.language))
+                        .font(DS.Font.sans(10, weight: .medium))
+                        .foregroundStyle(DS.Color.ink4)
+                }
+
+                Toggle("", isOn: .constant(account.isEnabled))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .disabled(true)
+
+                Button(action: onToggle) {
+                    DSIcon(name: isExpanded ? .chevronDown : .chevronRight, size: 11)
+                        .foregroundStyle(DS.Color.ink3)
+                        .frame(width: 24, height: 24)
                 }
                 .buttonStyle(.plain)
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+            .onTapGesture { onToggle() }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(account.displayName)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(AppTheme.textPrimary)
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 10) {
+                    detailRow(label: appState.language == .simplifiedChinese ? "同步频率" : "Sync interval",
+                              value: appState.language == .simplifiedChinese ? "每 5 分钟" : "Every 5 min")
+                    detailRow(label: appState.language == .simplifiedChinese ? "通知" : "Notifications",
+                              value: appState.language == .simplifiedChinese ? "新邮件时提醒" : "On new mail")
+                    detailRow(label: appState.language == .simplifiedChinese ? "签名" : "Signature",
+                              value: account.displayName.isEmpty ? "—" : account.displayName)
 
-                Text(account.emailAddress)
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppTheme.textSecondary)
-            }
+                    HStack {
+                        Spacer()
+                        Button {
+                            Task { await appState.refreshMailbox() }
+                        } label: {
+                            HStack(spacing: 5) {
+                                DSIcon(name: .refresh, size: 10)
+                                Text(appState.strings.syncNow)
+                                    .font(DS.Font.sans(11.5, weight: .medium))
+                            }
+                            .foregroundStyle(DS.Color.ink2)
+                            .padding(.horizontal, 10)
+                            .frame(height: 26)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(DS.Color.surface2)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
+                            )
+                        }
+                        .buttonStyle(.plain)
 
-            HStack(spacing: 7) {
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 7, height: 7)
-
-                Text(statusText)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .lineLimit(2)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(account.providerType.displayName(language: appState.language))
-                    Spacer()
-                    Text(appState.isProviderAvailable(account.providerType) ? appState.strings.availableNow : appState.strings.comingSoon)
-                }
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppTheme.textSecondary)
-
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 999, style: .continuous)
-                            .fill(Color.black.opacity(0.08))
-                            .frame(height: 5)
-
-                        RoundedRectangle(cornerRadius: 999, style: .continuous)
-                            .fill(providerTint)
-                            .frame(width: geometry.size.width * progressValue, height: 5)
+                        Button(action: onRemove) {
+                            Text(appState.strings.removeAccount)
+                                .font(DS.Font.sans(11.5, weight: .medium))
+                                .foregroundStyle(DS.Color.red)
+                                .padding(.horizontal, 10)
+                                .frame(height: 26)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .fill(DS.Color.red.opacity(0.10))
+                                )
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-                .frame(height: 5)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 14)
             }
         }
-        .padding(16)
+    }
+
+    private var statusBadge: some View {
+        let zh = appState.language == .simplifiedChinese
+        let (text, tint): (String, Color) = {
+            switch account.status {
+            case .connected:    return (zh ? "已连接" : "Connected", DS.Color.green)
+            case .syncing:      return (zh ? "同步中" : "Syncing", DS.Color.accent)
+            case .error:        return (zh ? "需重新授权" : "Re-authorize", DS.Color.amber)
+            case .disconnected: return (zh ? "未连接" : "Disconnected", DS.Color.ink4)
+            }
+        }()
+        return HStack(spacing: 4) {
+            Circle().fill(tint).frame(width: 6, height: 6)
+            Text(text)
+                .font(DS.Font.sans(10, weight: .semibold))
+                .foregroundStyle(tint)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(Capsule(style: .continuous).fill(tint.opacity(0.10)))
+    }
+
+    private var syncText: String {
+        if let last = account.lastSyncedAt {
+            let seconds = Int(Date().timeIntervalSince(last))
+            if seconds < 60 { return appState.strings.syncedJustNow }
+            if seconds < 3600 { return appState.strings.syncedMinutesAgo(seconds / 60) }
+            return appState.strings.syncedHoursAgo(seconds / 3600)
+        }
+        return appState.strings.neverSynced
+    }
+
+    private func detailRow(label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .font(DS.Font.sans(11.5))
+                .foregroundStyle(DS.Color.ink3)
+            Spacer()
+            Text(value)
+                .font(DS.Font.sans(11.5, weight: .medium))
+                .foregroundStyle(DS.Color.ink2)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 30)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(AppTheme.panelElevated)
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(DS.Color.surface2)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(
-                    appState.selectedAccountID == account.id ? providerTint.opacity(0.42) : AppTheme.panelBorder,
-                    lineWidth: appState.selectedAccountID == account.id ? 1.4 : 1
-                )
-        )
-        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .onTapGesture {
-            appState.selectedAccountID = account.id
-        }
-    }
-
-    private var providerTint: Color {
-        switch account.providerType {
-        case .qq:
-            return AppTheme.providerQQ
-        case .gmail:
-            return AppTheme.providerGmail
-        case .outlook:
-            return AppTheme.providerOutlook
-        case .icloud:
-            return AppTheme.providerICloud
-        case .customIMAPSMTP:
-            return AppTheme.providerCustom
-        }
-    }
-
-    private var progressValue: CGFloat {
-        switch account.providerType {
-        case .qq:
-            return 0.46
-        case .gmail:
-            return 0.72
-        case .outlook:
-            return 0.22
-        case .icloud:
-            return 0.94
-        case .customIMAPSMTP:
-            return 0.36
-        }
-    }
-
-    private var statusColor: Color {
-        switch account.status {
-        case .connected:
-            return AppTheme.successBright
-        case .syncing:
-            return AppTheme.info
-        case .error:
-            return AppTheme.destructive
-        case .disconnected:
-            return AppTheme.textTertiary
-        }
-    }
-
-    private var statusText: String {
-        switch account.status {
-        case .connected:
-            if let lastSyncedAt = account.lastSyncedAt {
-                return relativeSyncText(from: lastSyncedAt)
-            }
-            return appState.strings.accountConnected
-        case .syncing:
-            return appState.strings.syncingMailbox
-        case .error:
-            return account.lastErrorMessage ?? appState.strings.connectionError
-        case .disconnected:
-            return appState.strings.neverSynced
-        }
-    }
-
-    private func relativeSyncText(from date: Date) -> String {
-        let seconds = Int(Date().timeIntervalSince(date))
-        if seconds < 60 {
-            return appState.strings.syncedJustNow
-        }
-        if seconds < 3600 {
-            return appState.strings.syncedMinutesAgo(seconds / 60)
-        }
-        return appState.strings.syncedHoursAgo(seconds / 3600)
-    }
-}
-
-private struct AddAccountCardView: View {
-    @EnvironmentObject private var appState: AppState
-
-    let isExpanded: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 12) {
-                Circle()
-                    .fill(AppTheme.softIconSurface)
-                    .frame(width: 54, height: 54)
-                    .overlay {
-                        Image(systemName: "plus")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundStyle(AppTheme.textSecondary)
-                    }
-
-                VStack(spacing: 4) {
-                    Text(appState.strings.connectNewAccount)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(AppTheme.textPrimary)
-
-                    Text("QQ, Gmail, Outlook, iCloud, IMAP / SMTP")
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppTheme.textSecondary)
-                        .multilineTextAlignment(.center)
-                }
-            }
-            .frame(maxWidth: .infinity, minHeight: 176)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(AppTheme.panelElevated.opacity(0.72))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(
-                        isExpanded ? AppTheme.textPrimary.opacity(0.24) : AppTheme.panelBorder,
-                        style: StrokeStyle(lineWidth: 1.2, dash: [7, 7])
-                    )
-            )
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private struct ProviderOptionCardView: View {
-    @EnvironmentObject private var appState: AppState
-
-    let provider: MailProviderType
-    let isSelected: Bool
-    let isAvailable: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Image(systemName: provider.systemImageName)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(tint)
-                    Spacer()
-                    Circle()
-                        .fill(isAvailable ? AppTheme.successBright : AppTheme.textTertiary.opacity(0.6))
-                        .frame(width: 7, height: 7)
-                }
-
-                Text(provider.displayName(language: appState.language))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AppTheme.textPrimary)
-
-                Text(isAvailable ? appState.strings.availableNow : appState.strings.comingSoon)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AppTheme.textSecondary)
-            }
-            .frame(maxWidth: .infinity, minHeight: 84, alignment: .leading)
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isSelected ? tint.opacity(0.10) : AppTheme.panelMuted.opacity(0.58))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(isSelected ? tint.opacity(0.42) : AppTheme.panelBorder, lineWidth: isSelected ? 1.4 : 1)
-            )
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var tint: Color {
-        switch provider {
-        case .qq:
-            return AppTheme.providerQQ
-        case .gmail:
-            return AppTheme.providerGmail
-        case .outlook:
-            return AppTheme.providerOutlook
-        case .icloud:
-            return AppTheme.providerICloud
-        case .customIMAPSMTP:
-            return AppTheme.providerCustom
-        }
-    }
-}
-
-private struct SettingsFieldLabel: View {
-    let title: String
-
-    var body: some View {
-        Text(title)
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(AppTheme.textSecondary)
-    }
-}
-
-private struct AccountSettingsTextFieldStyle: TextFieldStyle {
-    func _body(configuration: TextField<Self._Label>) -> some View {
-        configuration
-            .textFieldStyle(.plain)
-            .padding(.horizontal, 11)
-            .padding(.vertical, 9)
-            .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(AppTheme.panelMuted.opacity(0.58))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(AppTheme.panelBorder, lineWidth: 1)
-            )
     }
 }
