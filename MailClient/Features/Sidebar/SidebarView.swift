@@ -30,25 +30,40 @@ struct SidebarView: View {
     // MARK: – Brand
 
     private var brandHeader: some View {
-        HStack(spacing: 8) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(LinearGradient(
-                        colors: [Color(white: 0.13), Color(white: 0.05)],
-                        startPoint: .top, endPoint: .bottom
-                    ))
-                    .frame(width: 22, height: 22)
-                Text("M")
-                    .font(DS.Font.mono(11, weight: .bold))
-                    .foregroundStyle(.white)
+        Menu {
+            // Workspace switcher (mock — single workspace today).
+            Button {
+                appState.clearScopes()
+                appState.selectedSidebarItem = .allMail
+            } label: { Label("MailStream · 个人", systemImage: "checkmark") }
+            Divider()
+            Button("管理工作区…")  { appState.route = .settings }
+            Button("帮助与快捷键…") { appState.route = .settings }
+        } label: {
+            HStack(spacing: 8) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(LinearGradient(
+                            colors: [Color(white: 0.13), Color(white: 0.05)],
+                            startPoint: .top, endPoint: .bottom
+                        ))
+                        .frame(width: 22, height: 22)
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    Text("M")
+                        .font(DS.Font.mono(11, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                Text("MailStream")
+                    .font(DS.Font.sans(13, weight: .semibold))
+                    .foregroundStyle(DS.Color.ink)
+                Spacer()
+                DSIcon(name: .chevronDown, size: 12)
+                    .foregroundStyle(DS.Color.ink4)
             }
-            Text("MailStream")
-                .font(DS.Font.sans(13, weight: .semibold))
-                .foregroundStyle(DS.Color.ink)
-            Spacer()
-            DSIcon(name: .chevronDown, size: 12)
-                .foregroundStyle(DS.Color.ink4)
+            .contentShape(Rectangle())
         }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .padding(.horizontal, 14)
         .padding(.top, 14)
         .padding(.bottom, 12)
@@ -83,12 +98,17 @@ struct SidebarView: View {
                 NavRow(
                     icon: item.designIcon,
                     label: item.title(in: appState.language),
-                    count: appState.messages.filter { $0.sidebarItem == item }.count,
-                    isSelected: appState.selectedSidebarItem == item,
+                    count: navCount(for: item),
+                    isSelected: appState.selectedSidebarItem == item && appState.route == .mail,
                     namespace: navNamespace
                 ) {
                     withAnimation(DS.Motion.snap) {
-                        appState.selectedSidebarItem = item
+                        if item == .drafts, appState.composeDrafts.isEmpty == false {
+                            appState.route = .compose
+                        } else {
+                            appState.selectedSidebarItem = item
+                            appState.route = .mail
+                        }
                     }
                 }
             }
@@ -96,35 +116,89 @@ struct SidebarView: View {
         .padding(.horizontal, 6)
     }
 
+    private func navCount(for item: SidebarItem) -> Int {
+        switch item {
+        case .drafts:  return appState.composeDrafts.count
+        case .priority: return appState.messages.filter(\.isPriority).count
+        default:       return appState.messages.filter { $0.sidebarItem == item }.count
+        }
+    }
+
     // MARK: – Accounts
 
     private var accountsSection: some View {
-        Section(title: appState.strings.accountsSection) {
+        Section(title: appState.strings.accountsSection, onPlus: {
+            appState.route = .accountWizard
+        }) {
             VStack(spacing: 1) {
-                ForEach(appState.accounts.isEmpty ? Self.placeholderAccounts : appState.accounts) { acc in
-                    AccountRow(
-                        name: acc.displayName.isEmpty ? acc.emailAddress : acc.displayName,
-                        unread: 0,
-                        color: ProviderPalette.color(for: acc.providerType)
-                    )
-                }
                 if appState.accounts.isEmpty {
                     EmptyHint(text: appState.strings.noAccountsTitle)
+                } else {
+                    // "All accounts" reset row when a scope is active.
+                    if appState.scopedAccountID != nil {
+                        AccountRow(
+                            name: appState.language == .simplifiedChinese ? "全部账号" : "All accounts",
+                            unread: 0,
+                            color: DS.Color.ink4,
+                            isDisabled: false,
+                            isSelected: false
+                        ) {
+                            withAnimation(DS.Motion.snap) {
+                                appState.scopeToAccount(nil)
+                            }
+                        }
+                    }
+                    ForEach(appState.accounts) { acc in
+                        let unread = appState.messages.filter { $0.accountID == acc.id }.count
+                        AccountRow(
+                            name: acc.displayName.isEmpty ? acc.emailAddress : acc.displayName,
+                            unread: unread,
+                            color: ProviderPalette.color(for: acc.providerType),
+                            isDisabled: appState.isAccountDisabled(acc),
+                            isSelected: appState.scopedAccountID == acc.id
+                        ) {
+                            withAnimation(DS.Motion.snap) {
+                                appState.scopeToAccount(acc.id)
+                            }
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 6)
         }
     }
 
-    private static let placeholderAccounts: [MailAccount] = []
-
     // MARK: – Labels
 
     private var labelsSection: some View {
-        Section(title: appState.strings.labelsSection) {
+        Section(title: appState.strings.labelsSection, onPlus: {
+            // mock — would open a "new label" sheet. Surfaces a banner.
+            appState.mailboxStatusMessage = appState.language == .simplifiedChinese
+                ? "新建标签：暂未实现，敬请期待"
+                : "New label — coming soon"
+        }) {
             VStack(spacing: 1) {
+                if appState.scopedLabelKey != nil {
+                    LabelRow(
+                        name: appState.language == .simplifiedChinese ? "全部标签" : "All labels",
+                        color: DS.Color.ink4,
+                        isSelected: false
+                    ) {
+                        withAnimation(DS.Motion.snap) {
+                            appState.scopeToLabel(nil)
+                        }
+                    }
+                }
                 ForEach(Self.labels) { label in
-                    LabelRow(name: label.name, color: label.color)
+                    LabelRow(
+                        name: label.name,
+                        color: label.color,
+                        isSelected: appState.scopedLabelKey == label.name
+                    ) {
+                        withAnimation(DS.Motion.snap) {
+                            appState.scopeToLabel(label.name)
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 6)
@@ -197,7 +271,10 @@ struct SidebarView: View {
 
 private struct Section<Content: View>: View {
     let title: String
+    var onPlus: (() -> Void)? = nil
     @ViewBuilder let content: () -> Content
+
+    @State private var plusHovered = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -207,12 +284,21 @@ private struct Section<Content: View>: View {
                     .tracking(0.6)
                     .foregroundStyle(DS.Color.ink4)
                 Spacer()
-                Button {} label: {
-                    DSIcon(name: .plus, size: 11)
-                        .foregroundStyle(DS.Color.ink4)
-                        .frame(width: 14, height: 14)
+                if let onPlus {
+                    Button(action: onPlus) {
+                        DSIcon(name: .plus, size: 11)
+                            .foregroundStyle(plusHovered ? DS.Color.ink2 : DS.Color.ink4)
+                            .frame(width: 16, height: 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                    .fill(plusHovered ? DS.Color.hover : .clear)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        withAnimation(DS.Motion.hover) { plusHovered = hovering }
+                    }
                 }
-                .buttonStyle(.plain)
             }
             .padding(.horizontal, 14)
             .padding(.top, 16)
@@ -288,57 +374,79 @@ private struct AccountRow: View {
     let name: String
     let unread: Int
     let color: Color
+    var isDisabled: Bool = false
+    var isSelected: Bool = false
+    var action: () -> Void = {}
+
     @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: 9) {
-            ProviderDot(color: color, size: 7, haloed: true)
-            Text(name)
-                .font(DS.Font.sans(12, weight: .medium))
-                .foregroundStyle(DS.Color.ink2)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Spacer()
-            if unread > 0 {
-                Text("\(unread)")
-                    .font(DS.Font.mono(10))
-                    .foregroundStyle(DS.Color.ink4)
+        Button(action: action) {
+            HStack(spacing: 9) {
+                ProviderDot(color: color, size: 7, haloed: !isDisabled)
+                    .opacity(isDisabled ? 0.4 : 1)
+                Text(name)
+                    .font(DS.Font.sans(12, weight: isSelected ? .semibold : .medium))
+                    .foregroundStyle(isSelected ? DS.Color.ink : DS.Color.ink2)
+                    .strikethrough(isDisabled, color: DS.Color.ink4)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer()
+                if unread > 0, !isDisabled {
+                    Text("\(unread)")
+                        .font(DS.Font.mono(10))
+                        .foregroundStyle(isSelected ? DS.Color.accent : DS.Color.ink4)
+                        .contentTransition(.numericText())
+                }
             }
+            .padding(.horizontal, 9)
+            .frame(height: 26)
+            .background(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(isSelected ? DS.Color.selected : (isHovered ? DS.Color.hover : .clear))
+            )
+            .compositingGroup()
         }
-        .padding(.horizontal, 9)
-        .frame(height: 26)
-        .background(
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(isHovered ? DS.Color.hover : .clear)
-        )
+        .buttonStyle(.plain)
         .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
+        .onHover { hovering in
+            withAnimation(DS.Motion.hover) { isHovered = hovering }
+        }
     }
 }
 
 private struct LabelRow: View {
     let name: String
     let color: Color
+    var isSelected: Bool = false
+    var action: () -> Void = {}
+
     @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: 9) {
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(color)
-                .frame(width: 8, height: 8)
-            Text(name)
-                .font(DS.Font.sans(12, weight: .medium))
-                .foregroundStyle(DS.Color.ink2)
-            Spacer()
+        Button(action: action) {
+            HStack(spacing: 9) {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(color)
+                    .frame(width: 8, height: 8)
+                Text(name)
+                    .font(DS.Font.sans(12, weight: isSelected ? .semibold : .medium))
+                    .foregroundStyle(isSelected ? DS.Color.ink : DS.Color.ink2)
+                Spacer()
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 26)
+            .background(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(isSelected ? DS.Color.selected : (isHovered ? DS.Color.hover : .clear))
+            )
+            .compositingGroup()
         }
-        .padding(.horizontal, 9)
-        .frame(height: 26)
-        .background(
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(isHovered ? DS.Color.hover : .clear)
-        )
+        .buttonStyle(.plain)
         .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
+        .onHover { hovering in
+            withAnimation(DS.Motion.hover) { isHovered = hovering }
+        }
     }
 }
 

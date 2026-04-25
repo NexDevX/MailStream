@@ -10,12 +10,62 @@ struct MessageListView: View {
             ListHeader()
             Divider().overlay(DS.Color.line)
             FilterChipsBar()
+            if scopeChip != nil {
+                Divider().overlay(DS.Color.line)
+                scopeBar
+            }
             Divider().overlay(DS.Color.line)
             list
         }
         .background(DS.Color.surface)
         .overlay(alignment: .trailing) {
             Rectangle().fill(DS.Color.line).frame(width: 1)
+        }
+    }
+
+    /// Active scope chip — derived from sidebar account/label scope.
+    private var scopeChip: (label: String, tint: Color)? {
+        if let id = appState.scopedAccountID,
+           let acc = appState.accounts.first(where: { $0.id == id }) {
+            return (
+                "\(appState.language == .simplifiedChinese ? "账号：" : "Account: ")\(acc.displayName.isEmpty ? acc.emailAddress : acc.displayName)",
+                ProviderPalette.color(for: acc.providerType)
+            )
+        }
+        if let key = appState.scopedLabelKey {
+            return ("\(appState.language == .simplifiedChinese ? "标签：" : "Label: ")\(key)", DS.Color.labelWork)
+        }
+        return nil
+    }
+
+    @ViewBuilder
+    private var scopeBar: some View {
+        if let chip = scopeChip {
+            HStack(spacing: 8) {
+                Circle().fill(chip.tint).frame(width: 7, height: 7)
+                Text(chip.label)
+                    .font(DS.Font.sans(11.5, weight: .medium))
+                    .foregroundStyle(DS.Color.ink2)
+                Spacer()
+                Button {
+                    withAnimation(DS.Motion.snap) { appState.clearScopes() }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(appState.language == .simplifiedChinese ? "清除" : "Clear")
+                            .font(DS.Font.sans(11, weight: .medium))
+                        DSIcon(name: .close, size: 9)
+                    }
+                    .foregroundStyle(DS.Color.ink3)
+                    .padding(.horizontal, 8)
+                    .frame(height: 22)
+                    .dsCard(cornerRadius: 5, fill: DS.Color.surface2)
+                }
+                .buttonStyle(.plain)
+                .hoverLift()
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .background(DS.Color.surface2)
         }
     }
 

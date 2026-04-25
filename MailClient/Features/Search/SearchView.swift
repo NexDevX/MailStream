@@ -127,8 +127,11 @@ struct SearchView: View {
                 .toggleStyle(.button)
                 .buttonStyle(.plain)
 
-                Button {
-                    // add-filter placeholder
+                Menu {
+                    // mock options
+                    Button("发件人包含…") { appState.snoozeBannerMessage = "发件人筛选（mock）" }
+                    Button("时间范围…") { appState.snoozeBannerMessage = "时间筛选（mock）" }
+                    Button("标签…") { appState.snoozeBannerMessage = "标签筛选（mock）" }
                 } label: {
                     HStack(spacing: 4) {
                         DSIcon(name: .plus, size: 10).foregroundStyle(DS.Color.ink3)
@@ -146,7 +149,9 @@ struct SearchView: View {
                     )
                     .compositingGroup()
                 }
-                .buttonStyle(.plain)
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 8)

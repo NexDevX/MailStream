@@ -239,32 +239,66 @@ private struct ReadingToolbar: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            actionButton(icon: .reply, label: appState.strings.replyTo == "回复" ? "回复" : "Reply", kbd: "R", primary: true)
-            actionButton(icon: .replyAll, label: nil, kbd: "⇧R")
-            actionButton(icon: .forward, label: nil, kbd: "F")
+            actionButton(icon: .reply, label: appState.strings.replyTo == "回复" ? "回复" : "Reply", kbd: "R", primary: true) {
+                if let message { appState.reply(to: message) }
+            }
+            actionButton(icon: .replyAll, label: nil, kbd: "⇧R") {
+                if let message { appState.reply(to: message, all: true) }
+            }
+            actionButton(icon: .forward, label: nil, kbd: "F") {
+                if let message { appState.forward(message: message) }
+            }
 
             Rectangle().fill(DS.Color.line).frame(width: 1, height: 18).padding(.horizontal, 6)
 
-            IconButton(icon: .archive)
-            IconButton(icon: .trash)
+            IconButton(icon: .archive) {
+                appState.mailboxStatusMessage = appState.language == .simplifiedChinese ? "已归档（mock）" : "Archived (mock)"
+            }
+            IconButton(icon: .trash) {
+                appState.mailboxStatusMessage = appState.language == .simplifiedChinese ? "已移到废纸篓（mock）" : "Moved to trash (mock)"
+            }
             IconButton(icon: .tag)
-            IconButton(icon: .clock)
-            IconButton(icon: .pin)
+            // Snooze with menu
+            Menu {
+                Button("1 小时后") { appState.snoozeSelectedMessage(label: "1 小时后") }
+                Button("今晚") { appState.snoozeSelectedMessage(label: "今晚") }
+                Button("明天上午") { appState.snoozeSelectedMessage(label: "明天上午") }
+                Button("下周一") { appState.snoozeSelectedMessage(label: "下周一") }
+            } label: {
+                DSIcon(name: .clock, size: 13)
+                    .foregroundStyle(DS.Color.ink2)
+                    .frame(width: 24, height: 24)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            IconButton(icon: .pin) {
+                appState.mailboxStatusMessage = appState.language == .simplifiedChinese ? "已置顶" : "Pinned"
+            }
 
             Spacer()
 
             Text(appState.selectionPositionText)
                 .font(DS.Font.mono(11))
                 .foregroundStyle(DS.Color.ink4)
-            IconButton(icon: .chevronLeft)
-            IconButton(icon: .chevronRight)
+            IconButton(icon: .chevronLeft) { stepSelection(-1) }
+            IconButton(icon: .chevronRight) { stepSelection(1) }
         }
         .padding(.horizontal, 14)
         .frame(height: 42)
     }
 
-    private func actionButton(icon: DSIconName, label: String?, kbd: String, primary: Bool = false) -> some View {
-        Button {} label: {
+    /// Cycle through filteredMessages by `delta`.
+    private func stepSelection(_ delta: Int) {
+        let list = appState.filteredMessages
+        guard list.isEmpty == false else { return }
+        let currentIndex = list.firstIndex { $0.id == appState.selectedMessageID } ?? 0
+        let next = (currentIndex + delta + list.count) % list.count
+        appState.selectedMessageID = list[next].id
+    }
+
+    private func actionButton(icon: DSIconName, label: String?, kbd: String, primary: Bool = false, action: @escaping () -> Void = {}) -> some View {
+        Button(action: action) {
             HStack(spacing: 6) {
                 DSIcon(name: icon, size: 12)
                 if let label {
@@ -367,10 +401,12 @@ private struct AttachmentCard: View {
 // MARK: - Quick reply
 
 private struct QuickReplyBox: View {
+    @EnvironmentObject private var appState: AppState
     let replyTo: String
     let hint: String
 
     @State private var draft: String = ""
+    @State private var isSending = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -381,12 +417,20 @@ private struct QuickReplyBox: View {
                 Spacer()
                 HStack(spacing: 3) {
                     ForEach(["Thanks!", "👍 看过了", "稍后细看"], id: \.self) { t in
-                        Text(t)
-                            .font(DS.Font.sans(10.5))
-                            .foregroundStyle(DS.Color.ink2)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(DS.Color.surface3))
+                        Button {
+                            draft = (draft.isEmpty ? "" : draft + "\n") + t
+                        } label: {
+                            Text(t)
+                                .font(DS.Font.sans(10.5))
+                                .foregroundStyle(DS.Color.ink2)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(DS.Color.surface3))
+                                .clipShape(Capsule())
+                                .compositingGroup()
+                        }
+                        .buttonStyle(.plain)
+                        .hoverLift()
                     }
                 }
             }
@@ -424,10 +468,12 @@ private struct QuickReplyBox: View {
                 Spacer()
                 Kbd(text: "⌘")
                 Kbd(text: "↵")
-                Button {} label: {
+                Button {
+                    Task { await sendQuickReply() }
+                } label: {
                     HStack(spacing: 5) {
                         DSIcon(name: .send, size: 11)
-                        Text("发送").font(DS.Font.sans(11, weight: .semibold))
+                        Text(isSending ? "发送中…" : "发送").font(DS.Font.sans(11, weight: .semibold))
                     }
                     .foregroundStyle(.white)
                     .padding(.horizontal, 12)
@@ -440,6 +486,8 @@ private struct QuickReplyBox: View {
                     .compositingGroup()
                 }
                 .buttonStyle(.plain)
+                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
+                .keyboardShortcut(.return, modifiers: .command)
                 .hoverLift()
                 .padding(.leading, 6)
             }
@@ -448,5 +496,19 @@ private struct QuickReplyBox: View {
             .background(DS.Color.surface2)
         }
         .dsCard(cornerRadius: DS.Radius.lg)
+    }
+
+    private func sendQuickReply() async {
+        guard isSending == false else { return }
+        let body = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard body.isEmpty == false else { return }
+        isSending = true
+        defer { isSending = false }
+        do {
+            try await appState.sendMail(to: replyTo, subject: "Re: ", body: body)
+            draft = ""
+        } catch {
+            appState.mailboxStatusMessage = error.localizedDescription
+        }
     }
 }

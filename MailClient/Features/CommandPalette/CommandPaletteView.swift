@@ -66,23 +66,49 @@ struct CommandPaletteView: View {
                 }
                 group(title: "跳转到") {
                     row(icon: .inbox, label: appState.strings.inbox, kbd: ["G", "I"], accessory: "\(appState.messages.count)") {
+                        appState.clearScopes()
                         appState.selectedSidebarItem = .allMail
+                        appState.route = .mail
                         dismiss()
                     }
                     row(icon: .flame, label: appState.strings.chipPriority, kbd: ["G", "P"], accessory: "\(appState.messages.filter(\.isPriority).count)") {
                         appState.selectedSidebarItem = .priority
+                        appState.route = .mail
                         dismiss()
                     }
-                    row(icon: .clock, label: appState.strings.snooze, kbd: ["G", "S"]) { dismiss() }
+                    row(icon: .clock, label: appState.strings.snooze, kbd: ["G", "S"]) {
+                        appState.snoozeBannerMessage = appState.language == .simplifiedChinese
+                            ? "稍后提醒列表为空（mock）"
+                            : "Snoozed list is empty (mock)"
+                        dismiss()
+                    }
                     row(icon: .send, label: appState.strings.sent, kbd: ["G", "E"]) {
                         appState.selectedSidebarItem = .sent
+                        appState.route = .mail
+                        dismiss()
+                    }
+                    row(icon: .draft, label: appState.strings.drafts, kbd: ["G", "D"], accessory: "\(appState.composeDrafts.count)") {
+                        if appState.composeDrafts.isEmpty == false {
+                            appState.route = .compose
+                        } else {
+                            appState.selectedSidebarItem = .drafts
+                            appState.route = .mail
+                        }
+                        dismiss()
+                    }
+                    row(icon: .settings, label: appState.strings.settings, kbd: ["⌘", ","]) {
+                        appState.route = .settings
                         dismiss()
                     }
                 }
                 if appState.accounts.isEmpty == false {
-                    group(title: "最近联系人") {
+                    group(title: appState.language == .simplifiedChinese ? "账号" : "Accounts") {
                         ForEach(appState.accounts.prefix(4)) { acc in
                             contactRow(acc)
+                                .onTapGesture {
+                                    appState.scopeToAccount(acc.id)
+                                    dismiss()
+                                }
                         }
                     }
                 }

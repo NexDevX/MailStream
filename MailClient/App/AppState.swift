@@ -75,6 +75,21 @@ final class AppState: ObservableObject {
     @Published var selectedFilterChip: InboxFilterChip = .all {
         didSet { syncSelectionIfNeeded() }
     }
+    /// Optional account scope — if set, only mail from this account is shown.
+    @Published var scopedAccountID: MailAccount.ID? {
+        didSet { syncSelectionIfNeeded() }
+    }
+    /// Optional label scope (sidebar label rows). Stored by label key, not enum.
+    @Published var scopedLabelKey: String? {
+        didSet { syncSelectionIfNeeded() }
+    }
+    /// Snooze toast / placeholder dialog flag.
+    @Published var snoozeBannerMessage: String?
+    /// Disabled-account ids (we don't yet persist; UI-side mock).
+    @Published var disabledAccountIDs: Set<MailAccount.ID> = []
+    /// Set to true once the user dismisses Onboarding manually so RootView
+    /// won't force them back when accounts is still empty.
+    @Published var hasDismissedOnboarding: Bool = false
     @Published var language: AppLanguage {
         didSet {
             UserDefaults.standard.set(language.rawValue, forKey: Self.languageDefaultsKey)
@@ -111,6 +126,8 @@ final class AppState: ObservableObject {
             .filter(matchesSidebarItem)
             .filter(matchesInboxFilter)
             .filter(matchesFilterChip)
+            .filter(matchesAccountScope)
+            .filter(matchesLabelScope)
             .filter(matchesSearchText)
     }
 
@@ -236,6 +253,81 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Account UI helpers
+
+    /// Mock toggle — flips local enabled-set without touching the credential
+    /// store. Real impl would push the change down to MailSyncService.
+    func toggleAccountEnabled(_ account: MailAccount) {
+        if disabledAccountIDs.contains(account.id) {
+            disabledAccountIDs.remove(account.id)
+            mailboxStatusMessage = strings.accountConnected
+        } else {
+            disabledAccountIDs.insert(account.id)
+            mailboxStatusMessage = "\(account.displayName.isEmpty ? account.emailAddress : account.displayName) — paused"
+        }
+    }
+
+    func isAccountDisabled(_ account: MailAccount) -> Bool {
+        disabledAccountIDs.contains(account.id)
+    }
+
+    /// Sidebar account row → scope inbox to that account.
+    func scopeToAccount(_ accountID: MailAccount.ID?) {
+        scopedAccountID = accountID
+        scopedLabelKey = nil
+        selectedSidebarItem = .allMail
+        route = .mail
+    }
+
+    /// Sidebar label row → scope to label key (matches against message.tag).
+    func scopeToLabel(_ key: String?) {
+        scopedLabelKey = key
+        route = .mail
+    }
+
+    func clearScopes() {
+        scopedAccountID = nil
+        scopedLabelKey = nil
+    }
+
+    // MARK: - Snooze (mock)
+
+    /// Mock snooze — surfaces a transient banner. Real impl would write to
+    /// the backing store and re-deliver at the chosen time.
+    func snoozeSelectedMessage(label: String) {
+        guard let msg = selectedMessage else { return }
+        snoozeBannerMessage = "「\(msg.subject)」 已稍后提醒：\(label)"
+    }
+
+    // MARK: - Reply / Forward prefill
+
+    func reply(to message: MailMessage, all: Bool = false) {
+        let prefix = "Re: "
+        let subject = message.subject.hasPrefix(prefix) ? message.subject : prefix + message.subject
+        let recipient = message.senderName // mock — sender role not parsed as email
+        let body = "\n\n— \n在 \(message.timestampLabel) \(message.senderName) 写道：\n> \(message.bodyParagraphs.first ?? message.preview)"
+        let cc = all ? message.recipientLine : ""
+        openCompose(prefill: ComposeDraft(
+            to: recipient,
+            cc: cc,
+            subject: subject,
+            body: body,
+            fromAccountID: message.accountID ?? accounts.first?.id,
+            showCcBcc: all
+        ))
+    }
+
+    func forward(message: MailMessage) {
+        let prefix = "Fwd: "
+        let subject = message.subject.hasPrefix(prefix) ? message.subject : prefix + message.subject
+        let body = "\n\n---------- 转发邮件 ----------\n发件人：\(message.senderName)\n时间：\(message.timestampLabel)\n主题：\(message.subject)\n\n\(message.bodyParagraphs.joined(separator: "\n\n"))"
+        openCompose(prefill: ComposeDraft(
+            subject: subject,
+            body: body,
+            fromAccountID: message.accountID ?? accounts.first?.id
+        ))
+    }
+
     // MARK: - Compose tabs
 
     func openCompose(prefill: ComposeDraft? = nil) {
@@ -324,6 +416,19 @@ final class AppState: ObservableObject {
         case .attach:   return message.preview.lowercased().contains("attach") || message.preview.contains("附件")
         case .mentions: return message.bodyParagraphs.joined().contains("@")
         }
+    }
+
+    private func matchesAccountScope(_ message: MailMessage) -> Bool {
+        guard let scope = scopedAccountID else { return true }
+        return message.accountID == scope
+    }
+
+    private func matchesLabelScope(_ message: MailMessage) -> Bool {
+        guard let key = scopedLabelKey else { return true }
+        // mock: match label key against tag (case-insensitive contains)
+        return message.tag.lowercased().contains(key.lowercased())
+            || message.preview.contains(key)
+            || message.subject.contains(key)
     }
 
     private func matchesSearchText(_ message: MailMessage) -> Bool {

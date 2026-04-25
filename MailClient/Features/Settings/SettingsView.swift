@@ -391,11 +391,19 @@ private struct AccountListRow: View {
                         .foregroundStyle(DS.Color.ink4)
                 }
 
-                Toggle("", isOn: .constant(account.isEnabled))
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .disabled(true)
+                // mock toggle — see AppState.toggleAccountEnabled. Persists in
+                // a UI-side disabled set; doesn't reach MailSyncService yet.
+                Toggle("", isOn: Binding(
+                    get: { appState.isAccountDisabled(account) == false },
+                    set: { _ in
+                        withAnimation(DS.Motion.surface) {
+                            appState.toggleAccountEnabled(account)
+                        }
+                    }
+                ))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
 
                 Button(action: { withAnimation(DS.Motion.surface) { onToggle() } }) {
                     DSIcon(name: .chevronRight, size: 11)

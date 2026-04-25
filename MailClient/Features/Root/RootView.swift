@@ -16,7 +16,34 @@ struct RootView: View {
                                 .combined(with: .move(edge: .top))
                     )
             }
+
+            // Snooze / mock-feature toast — sits above all routes, dismisses
+            // after 3.5s. Driven entirely by appState.snoozeBannerMessage so
+            // any feature can surface a banner.
+            if let banner = appState.snoozeBannerMessage {
+                VStack {
+                    StatusBanner(
+                        message: banner,
+                        icon: .clock,
+                        tint: DS.Color.accent,
+                        onDismiss: { appState.snoozeBannerMessage = nil }
+                    )
+                    .padding(.top, 14)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .task(id: banner) {
+                        try? await Task.sleep(nanoseconds: 3_500_000_000)
+                        await MainActor.run {
+                            if appState.snoozeBannerMessage == banner {
+                                appState.snoozeBannerMessage = nil
+                            }
+                        }
+                    }
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, alignment: .top)
+            }
         }
+        .animation(DS.Motion.surface, value: appState.snoozeBannerMessage)
         .animation(DS.Motion.surface, value: appState.isShowingCommandPalette)
         .animation(DS.Motion.surface, value: appState.route)
         .onAppear { syncRouteWithAccounts() }
@@ -94,7 +121,9 @@ struct RootView: View {
     }
 
     private func syncRouteWithAccounts() {
-        if appState.accounts.isEmpty, appState.route == .mail {
+        if appState.accounts.isEmpty,
+           appState.route == .mail,
+           appState.hasDismissedOnboarding == false {
             appState.route = .onboarding
         }
     }

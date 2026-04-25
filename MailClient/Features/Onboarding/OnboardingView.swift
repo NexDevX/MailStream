@@ -5,26 +5,27 @@ struct OnboardingView: View {
     @EnvironmentObject private var appState: AppState
 
     @State private var didAppear = false
-    @State private var hue: Double = 0
 
     var body: some View {
         ZStack {
+            // Static gradient — no per-frame repaint. Energy/CPU win was
+            // dropping the previous animated `sin(hue)` drift which forced a
+            // full-screen redraw at 60Hz on every appearance.
             LinearGradient(
                 colors: [DS.Color.chromeTop, DS.Color.chromeBottom],
-                startPoint: UnitPoint(x: CGFloat(0.5 + 0.2 * sin(hue)), y: 0),
-                endPoint:   UnitPoint(x: CGFloat(0.5 - 0.2 * sin(hue)), y: 1)
+                startPoint: .top, endPoint: .bottom
             )
             .ignoresSafeArea()
-            .animation(.linear(duration: 8).repeatForever(autoreverses: true), value: hue)
-            .onAppear { hue = .pi }
 
-            // Soft accent halo drifts slowly behind the card.
+            // Static accent halo — large blur is rasterized once.
             Circle()
                 .fill(DS.Color.accentGlow)
-                .frame(width: 520, height: 520)
-                .blur(radius: 80)
-                .offset(x: didAppear ? 60 : -40, y: didAppear ? -80 : -120)
-                .animation(.easeInOut(duration: 6).repeatForever(autoreverses: true), value: didAppear)
+                .frame(width: 480, height: 480)
+                .blur(radius: 64)
+                .offset(x: 40, y: -90)
+                .opacity(didAppear ? 1 : 0)
+                .animation(DS.Motion.surface, value: didAppear)
+                .allowsHitTesting(false)
 
             VStack(spacing: 28) {
                 brandMark
@@ -131,6 +132,7 @@ struct OnboardingView: View {
             .hoverLift()
 
             Button {
+                appState.hasDismissedOnboarding = true
                 appState.route = .mail
             } label: {
                 Text(isChinese ? "先看看界面 →" : "Preview the app →")

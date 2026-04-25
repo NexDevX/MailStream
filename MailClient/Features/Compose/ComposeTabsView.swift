@@ -295,8 +295,12 @@ private struct ComposeEditor: View {
 
             Spacer()
 
-            Button {
-                // schedule send placeholder
+            Menu {
+                // mock — would schedule via NSBackgroundActivity / EventKit.
+                Button("1 小时后发送")  { appState.snoozeBannerMessage = "已安排：1 小时后发送（mock）" }
+                Button("今晚 8:00")    { appState.snoozeBannerMessage = "已安排：今晚 8:00（mock）" }
+                Button("明天上午 9:00") { appState.snoozeBannerMessage = "已安排：明天上午 9:00（mock）" }
+                Button("下周一 9:00")  { appState.snoozeBannerMessage = "已安排：下周一 9:00（mock）" }
             } label: {
                 HStack(spacing: 5) {
                     DSIcon(name: .clock, size: 11)
@@ -308,7 +312,9 @@ private struct ComposeEditor: View {
                 .frame(height: 28)
                 .dsCard(cornerRadius: DS.Radius.md, fill: DS.Color.surface2)
             }
-            .buttonStyle(.plain)
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
 
             Button {
                 Task { await send() }
