@@ -2,6 +2,8 @@ name: Build macOS Installer
 
 on:
   push:
+    branches:
+      - "**"
     tags:
       - "v*"
   pull_request:
