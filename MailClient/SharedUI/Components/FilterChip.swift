@@ -8,6 +8,8 @@ struct FilterChipView: View {
     let isSelected: Bool
     let action: () -> Void
 
+    @State private var isHovered = false
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
@@ -19,18 +21,24 @@ struct FilterChipView: View {
                 Text("\(count)")
                     .font(DS.Font.mono(10))
                     .opacity(isSelected ? 0.78 : 0.58)
+                    .contentTransition(.numericText())
             }
             .padding(.horizontal, icon == nil ? 9 : 8)
             .frame(height: 22)
             .foregroundStyle(isSelected ? Color.white : DS.Color.ink2)
             .background(
-                Capsule(style: .continuous).fill(isSelected ? DS.Color.ink : DS.Color.surface)
+                Capsule(style: .continuous)
+                    .fill(isSelected ? DS.Color.ink : (isHovered ? DS.Color.surface3 : DS.Color.surface))
             )
             .overlay(
                 Capsule(style: .continuous)
                     .stroke(isSelected ? DS.Color.ink : DS.Color.line, lineWidth: DS.Stroke.hairline)
             )
+            .scaleEffect(isHovered && !isSelected ? 1.04 : 1.0)
         }
         .buttonStyle(.plain)
+        .animation(DS.Motion.snap, value: isSelected)
+        .animation(DS.Motion.hover, value: isHovered)
+        .onHover { isHovered = $0 }
     }
 }

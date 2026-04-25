@@ -81,6 +81,8 @@ struct SidebarView: View {
 
     // MARK: – Nav
 
+    @Namespace private var navNamespace
+
     private var navSection: some View {
         VStack(spacing: 1) {
             ForEach(SidebarItem.allCases) { item in
@@ -88,9 +90,12 @@ struct SidebarView: View {
                     icon: item.designIcon,
                     label: item.title(in: appState.language),
                     count: appState.messages.filter { $0.sidebarItem == item }.count,
-                    isSelected: appState.selectedSidebarItem == item
+                    isSelected: appState.selectedSidebarItem == item,
+                    namespace: navNamespace
                 ) {
-                    appState.selectedSidebarItem = item
+                    withAnimation(DS.Motion.snap) {
+                        appState.selectedSidebarItem = item
+                    }
                 }
             }
         }
@@ -229,6 +234,7 @@ private struct NavRow: View {
     let label: String
     let count: Int
     let isSelected: Bool
+    let namespace: Namespace.ID
     let action: () -> Void
 
     @State private var isHovered = false
@@ -238,6 +244,7 @@ private struct NavRow: View {
             HStack(spacing: 9) {
                 DSIcon(name: icon, size: 13)
                     .foregroundStyle(isSelected ? DS.Color.accent : DS.Color.ink3)
+                    .scaleEffect(isSelected ? 1.05 : 1)
                 Text(label)
                     .font(DS.Font.sans(12, weight: isSelected ? .semibold : .medium))
                     .foregroundStyle(isSelected ? DS.Color.ink : DS.Color.ink2)
@@ -246,13 +253,22 @@ private struct NavRow: View {
                     Text("\(count)")
                         .font(DS.Font.mono(10, weight: .semibold))
                         .foregroundStyle(isSelected ? DS.Color.accent : DS.Color.ink4)
+                        .contentTransition(.numericText())
                 }
             }
             .padding(.horizontal, 9)
             .frame(height: 26)
             .background(
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(isSelected ? DS.Color.selected : (isHovered ? DS.Color.hover : .clear))
+                ZStack {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(DS.Color.selected)
+                            .matchedGeometryEffect(id: "navSelection", in: namespace)
+                    } else if isHovered {
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(DS.Color.hover)
+                    }
+                }
             )
             .overlay(alignment: .leading) {
                 if isSelected {
@@ -261,11 +277,15 @@ private struct NavRow: View {
                         .frame(width: 2, height: 14)
                         .clipShape(RoundedRectangle(cornerRadius: 1, style: .continuous))
                         .offset(x: -6)
+                        .matchedGeometryEffect(id: "navAccentBar", in: namespace)
                 }
             }
         }
         .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
+        .animation(DS.Motion.snap, value: isSelected)
+        .onHover { hovering in
+            withAnimation(DS.Motion.hover) { isHovered = hovering }
+        }
     }
 }
 

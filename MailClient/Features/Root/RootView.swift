@@ -6,14 +6,19 @@ struct RootView: View {
     var body: some View {
         ZStack {
             routed
+                .id(appState.route)
+                .transition(routeTransition)
 
             if appState.isShowingCommandPalette {
                 CommandPaletteView()
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .transition(
+                        .opacity.combined(with: .scale(scale: 0.96, anchor: .center))
+                                .combined(with: .move(edge: .top))
+                    )
             }
         }
-        .animation(.easeOut(duration: 0.12), value: appState.isShowingCommandPalette)
-        .animation(.easeInOut(duration: 0.18), value: appState.route)
+        .animation(DS.Motion.surface, value: appState.isShowingCommandPalette)
+        .animation(DS.Motion.surface, value: appState.route)
         .onAppear { syncRouteWithAccounts() }
         .onChange(of: appState.accounts) { syncRouteWithAccounts() }
         .onChange(of: appState.isShowingCompose) {
@@ -63,6 +68,28 @@ struct RootView: View {
                 StatusBarView()
             }
             .background(DS.Color.bg)
+        }
+    }
+
+    private var routeTransition: AnyTransition {
+        switch appState.route {
+        case .onboarding, .accountWizard:
+            return .asymmetric(
+                insertion: .opacity.combined(with: .scale(scale: 0.98, anchor: .center)),
+                removal: .opacity
+            )
+        case .settings, .search:
+            return .asymmetric(
+                insertion: .opacity.combined(with: .move(edge: .trailing)),
+                removal: .opacity.combined(with: .move(edge: .trailing))
+            )
+        case .compose:
+            return .asymmetric(
+                insertion: .opacity.combined(with: .move(edge: .bottom)),
+                removal: .opacity.combined(with: .move(edge: .bottom))
+            )
+        case .mail:
+            return .opacity
         }
     }
 

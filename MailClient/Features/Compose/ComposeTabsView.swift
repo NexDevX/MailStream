@@ -4,6 +4,8 @@ import SwiftUI
 struct ComposeTabsView: View {
     @EnvironmentObject private var appState: AppState
 
+    @Namespace private var tabNamespace
+
     var body: some View {
         VStack(spacing: 0) {
             tabBar
@@ -11,6 +13,11 @@ struct ComposeTabsView: View {
             if let id = appState.activeDraftID,
                let index = appState.composeDrafts.firstIndex(where: { $0.id == id }) {
                 ComposeEditor(draftID: id, draft: $appState.composeDrafts[index])
+                    .id(id)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .trailing)),
+                        removal:   .opacity.combined(with: .move(edge: .leading))
+                    ))
             } else {
                 EmptyStateView(
                     title: isChinese ? "没有打开的草稿" : "No open draft",
@@ -21,6 +28,8 @@ struct ComposeTabsView: View {
             }
         }
         .background(DS.Color.bg)
+        .animation(DS.Motion.surface, value: appState.activeDraftID)
+        .animation(DS.Motion.snap, value: appState.composeDrafts.map(\.id))
     }
 
     // MARK: – Tab bar
@@ -91,15 +100,24 @@ struct ComposeTabsView: View {
         .padding(.horizontal, 8)
         .frame(height: 28)
         .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(isActive ? DS.Color.surface : .clear)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(isActive ? DS.Color.line : .clear, lineWidth: DS.Stroke.hairline)
+            ZStack {
+                if isActive {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(DS.Color.surface)
+                        .matchedGeometryEffect(id: "composeTabBg", in: tabNamespace)
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
+                        .matchedGeometryEffect(id: "composeTabBorder", in: tabNamespace)
+                }
+            }
         )
         .contentShape(Rectangle())
-        .onTapGesture { appState.activeDraftID = draft.id }
+        .onTapGesture {
+            withAnimation(DS.Motion.snap) {
+                appState.activeDraftID = draft.id
+            }
+        }
+        .transition(.scale(scale: 0.9).combined(with: .opacity))
     }
 
     private var isChinese: Bool { appState.language == .simplifiedChinese }

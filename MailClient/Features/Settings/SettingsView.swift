@@ -9,6 +9,7 @@ struct SettingsView: View {
 
     @State private var selectedSection: Section = .accounts
     @State private var expandedAccountID: MailAccount.ID?
+    @Namespace private var sectionNamespace
 
     enum Section: String, CaseIterable, Identifiable {
         case accounts, general, appearance, shortcuts, about
@@ -68,11 +69,14 @@ struct SettingsView: View {
     private func sectionRow(_ section: Section) -> some View {
         let isSelected = section == selectedSection
         return Button {
-            selectedSection = section
+            withAnimation(DS.Motion.snap) {
+                selectedSection = section
+            }
         } label: {
             HStack(spacing: 9) {
                 DSIcon(name: icon(for: section), size: 13)
                     .foregroundStyle(isSelected ? DS.Color.accent : DS.Color.ink3)
+                    .scaleEffect(isSelected ? 1.05 : 1)
                 Text(label(for: section))
                     .font(DS.Font.sans(12, weight: isSelected ? .semibold : .medium))
                     .foregroundStyle(isSelected ? DS.Color.ink : DS.Color.ink2)
@@ -81,8 +85,13 @@ struct SettingsView: View {
             .padding(.horizontal, 9)
             .frame(height: 28)
             .background(
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(isSelected ? DS.Color.selected : .clear)
+                ZStack {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(DS.Color.selected)
+                            .matchedGeometryEffect(id: "settingsSection", in: sectionNamespace)
+                    }
+                }
             )
         }
         .buttonStyle(.plain)
@@ -115,18 +124,26 @@ struct SettingsView: View {
     private var detail: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                switch selectedSection {
-                case .accounts:   accountsPanel
-                case .general:    generalPanel
-                case .appearance: appearancePanel
-                case .shortcuts:  shortcutsPanel
-                case .about:      aboutPanel
+                Group {
+                    switch selectedSection {
+                    case .accounts:   accountsPanel
+                    case .general:    generalPanel
+                    case .appearance: appearancePanel
+                    case .shortcuts:  shortcutsPanel
+                    case .about:      aboutPanel
+                    }
                 }
+                .id(selectedSection)
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .offset(y: 10)),
+                    removal:   .opacity.combined(with: .offset(y: -10))
+                ))
             }
             .padding(28)
             .frame(maxWidth: 780, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .animation(DS.Motion.surface, value: selectedSection)
     }
 
     // MARK: Accounts
@@ -404,9 +421,10 @@ private struct AccountListRow: View {
                     .controlSize(.small)
                     .disabled(true)
 
-                Button(action: onToggle) {
-                    DSIcon(name: isExpanded ? .chevronDown : .chevronRight, size: 11)
+                Button(action: { withAnimation(DS.Motion.surface) { onToggle() } }) {
+                    DSIcon(name: .chevronRight, size: 11)
                         .foregroundStyle(DS.Color.ink3)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
                         .frame(width: 24, height: 24)
                 }
                 .buttonStyle(.plain)
@@ -414,7 +432,7 @@ private struct AccountListRow: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .contentShape(Rectangle())
-            .onTapGesture { onToggle() }
+            .onTapGesture { withAnimation(DS.Motion.surface) { onToggle() } }
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 10) {
@@ -465,6 +483,10 @@ private struct AccountListRow: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.bottom, 14)
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .move(edge: .top)),
+                    removal:   .opacity.combined(with: .move(edge: .top))
+                ))
             }
         }
     }

@@ -4,20 +4,49 @@ import SwiftUI
 struct OnboardingView: View {
     @EnvironmentObject private var appState: AppState
 
+    @State private var didAppear = false
+    @State private var hue: Double = 0
+
     var body: some View {
         ZStack {
             LinearGradient(
                 colors: [DS.Color.chromeTop, DS.Color.chromeBottom],
-                startPoint: .top, endPoint: .bottom
+                startPoint: UnitPoint(x: CGFloat(0.5 + 0.2 * sin(hue)), y: 0),
+                endPoint:   UnitPoint(x: CGFloat(0.5 - 0.2 * sin(hue)), y: 1)
             )
             .ignoresSafeArea()
+            .animation(.linear(duration: 8).repeatForever(autoreverses: true), value: hue)
+            .onAppear { hue = .pi }
+
+            // Soft accent halo drifts slowly behind the card.
+            Circle()
+                .fill(DS.Color.accentGlow)
+                .frame(width: 520, height: 520)
+                .blur(radius: 80)
+                .offset(x: didAppear ? 60 : -40, y: didAppear ? -80 : -120)
+                .animation(.easeInOut(duration: 6).repeatForever(autoreverses: true), value: didAppear)
 
             VStack(spacing: 28) {
                 brandMark
+                    .opacity(didAppear ? 1 : 0)
+                    .scaleEffect(didAppear ? 1 : 0.9)
+                    .animation(DS.Motion.surface.delay(0.05), value: didAppear)
                 headline
+                    .opacity(didAppear ? 1 : 0)
+                    .offset(y: didAppear ? 0 : 12)
+                    .animation(DS.Motion.surface.delay(0.15), value: didAppear)
                 providerRow
+                    .opacity(didAppear ? 1 : 0)
+                    .offset(y: didAppear ? 0 : 12)
+                    .animation(DS.Motion.surface.delay(0.25), value: didAppear)
                 actions
+                    .opacity(didAppear ? 1 : 0)
+                    .offset(y: didAppear ? 0 : 12)
+                    .animation(DS.Motion.surface.delay(0.35), value: didAppear)
                 featureBadges
+                    .opacity(didAppear ? 1 : 0)
+                    .offset(y: didAppear ? 0 : 12)
+                    .animation(DS.Motion.surface.delay(0.45), value: didAppear)
             }
             .padding(.horizontal, 48)
             .padding(.vertical, 40)
@@ -32,6 +61,7 @@ struct OnboardingView: View {
             )
             .shadow(color: Color.black.opacity(0.08), radius: 44, x: 0, y: 18)
         }
+        .onAppear { didAppear = true }
     }
 
     private var brandMark: some View {
