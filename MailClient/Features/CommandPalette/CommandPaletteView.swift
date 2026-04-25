@@ -20,15 +20,13 @@ struct CommandPaletteView: View {
                 footer
             }
             .frame(width: 640)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(DS.Color.surface)
+            .dsCard(
+                cornerRadius: 10,
+                stroke: DS.Color.lineStrong,
+                shadowOpacity: 0.22,
+                shadowRadius: 44,
+                shadowY: 16
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(DS.Color.lineStrong, lineWidth: DS.Stroke.hairline)
-            )
-            .shadow(color: Color.black.opacity(0.22), radius: 44, x: 0, y: 16)
             .onAppear { isQueryFocused = true }
         }
     }

@@ -53,6 +53,78 @@ extension View {
     }
 }
 
+// MARK: - Surface modifiers — fill + stroke + clipShape combined
+
+/// One-stop rounded surface modifier. Critically, it `clipShape`s children
+/// so divider lines, hover highlights, matchedGeometry shapes, etc. cannot
+/// leak past the rounded corners (the cause of the visible square edges).
+struct DSCard: ViewModifier {
+    var cornerRadius: CGFloat = 10
+    var fill: Color = DS.Color.surface
+    var stroke: Color? = DS.Color.line
+    var strokeWidth: CGFloat = DS.Stroke.hairline
+    var shadowOpacity: Double = 0
+    var shadowRadius: CGFloat = 0
+    var shadowY: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        return content
+            .background(shape.fill(fill))
+            .clipShape(shape)
+            .overlay(
+                shape.strokeBorder(stroke ?? .clear, lineWidth: stroke == nil ? 0 : strokeWidth)
+            )
+            .compositingGroup()
+            .shadow(
+                color: Color.black.opacity(shadowOpacity),
+                radius: shadowRadius,
+                x: 0,
+                y: shadowY
+            )
+    }
+}
+
+extension View {
+    /// Apply a rounded card surface with fill + stroke. Children are clipped to
+    /// the rounded shape so highlights, dividers, and animated backgrounds
+    /// never bleed past the corners.
+    func dsCard(
+        cornerRadius: CGFloat = 10,
+        fill: Color = DS.Color.surface,
+        stroke: Color? = DS.Color.line,
+        strokeWidth: CGFloat = DS.Stroke.hairline,
+        shadowOpacity: Double = 0,
+        shadowRadius: CGFloat = 0,
+        shadowY: CGFloat = 0
+    ) -> some View {
+        modifier(DSCard(
+            cornerRadius: cornerRadius,
+            fill: fill,
+            stroke: stroke,
+            strokeWidth: strokeWidth,
+            shadowOpacity: shadowOpacity,
+            shadowRadius: shadowRadius,
+            shadowY: shadowY
+        ))
+    }
+
+    /// Variant that keeps content layered (no clip) but still draws the rounded
+    /// fill — useful for cells whose children must NOT be clipped (e.g.,
+    /// floating tooltips). Prefer `dsCard` in 95% of cases.
+    func dsCardNoClip(
+        cornerRadius: CGFloat = 10,
+        fill: Color = DS.Color.surface,
+        stroke: Color? = DS.Color.line,
+        strokeWidth: CGFloat = DS.Stroke.hairline
+    ) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        return self
+            .background(shape.fill(fill))
+            .overlay(shape.strokeBorder(stroke ?? .clear, lineWidth: stroke == nil ? 0 : strokeWidth))
+    }
+}
+
 // MARK: - Pulse ring
 
 /// Animated pulse ring used by status dots while syncing.

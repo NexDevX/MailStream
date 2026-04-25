@@ -73,14 +73,7 @@ private struct SearchBar: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 30)
-        .background(
-            RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
-                .fill(DS.Color.surface2)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
-                .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-        )
+        .dsCard(cornerRadius: DS.Radius.md, fill: DS.Color.surface2)
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
     }
@@ -105,6 +98,8 @@ private struct ListHeader: View {
                     RoundedRectangle(cornerRadius: 3, style: .continuous)
                         .fill(DS.Color.surface3)
                 )
+                .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+                .compositingGroup()
             Spacer()
             HStack(spacing: 2) {
                 HStack(spacing: 4) {
@@ -297,5 +292,7 @@ struct LabelPill: View {
                 RoundedRectangle(cornerRadius: 3, style: .continuous)
                     .fill(tint.opacity(0.10))
             )
+            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+            .compositingGroup()
     }
 }

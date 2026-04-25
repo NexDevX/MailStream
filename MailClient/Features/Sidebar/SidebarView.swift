@@ -67,16 +67,10 @@ struct SidebarView: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 30)
-            .background(
-                RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
-                    .fill(DS.Color.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
-                    .stroke(DS.Color.lineStrong, lineWidth: DS.Stroke.hairline)
-            )
+            .dsCard(cornerRadius: DS.Radius.md, stroke: DS.Color.lineStrong)
         }
         .buttonStyle(.plain)
+        .hoverLift(pressed: 0.98, hovered: 1.01)
     }
 
     // MARK: – Nav
@@ -259,7 +253,7 @@ private struct NavRow: View {
             .padding(.horizontal, 9)
             .frame(height: 26)
             .background(
-                ZStack {
+                Group {
                     if isSelected {
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
                             .fill(DS.Color.selected)
@@ -270,6 +264,7 @@ private struct NavRow: View {
                     }
                 }
             )
+            .compositingGroup()
             .overlay(alignment: .leading) {
                 if isSelected {
                     Rectangle()

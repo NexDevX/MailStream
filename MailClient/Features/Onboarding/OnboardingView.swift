@@ -51,15 +51,7 @@ struct OnboardingView: View {
             .padding(.horizontal, 48)
             .padding(.vertical, 40)
             .frame(maxWidth: 640)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(DS.Color.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-            )
-            .shadow(color: Color.black.opacity(0.08), radius: 44, x: 0, y: 18)
+            .dsCard(cornerRadius: 14, shadowOpacity: 0.08, shadowRadius: 44, shadowY: 18)
         }
         .onAppear { didAppear = true }
     }
@@ -132,8 +124,11 @@ struct OnboardingView: View {
                     RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
                         .fill(DS.Color.accent)
                 )
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous))
+                .compositingGroup()
             }
             .buttonStyle(.plain)
+            .hoverLift()
 
             Button {
                 appState.route = .mail
@@ -165,12 +160,10 @@ struct OnboardingView: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 26)
-        .background(
-            Capsule(style: .continuous).fill(DS.Color.surface2)
-        )
-        .overlay(
-            Capsule(style: .continuous).stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-        )
+        .background(Capsule(style: .continuous).fill(DS.Color.surface2))
+        .clipShape(Capsule(style: .continuous))
+        .overlay(Capsule(style: .continuous).strokeBorder(DS.Color.line, lineWidth: DS.Stroke.hairline))
+        .compositingGroup()
     }
 
     private var isChinese: Bool { appState.language == .simplifiedChinese }

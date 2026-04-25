@@ -159,6 +159,8 @@ struct MessageDetailView: View {
             RoundedRectangle(cornerRadius: 3, style: .continuous)
                 .fill(DS.Color.greenSoft)
         )
+        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+        .compositingGroup()
     }
 
     // MARK: – Body paragraphs
@@ -273,16 +275,10 @@ private struct ReadingToolbar: View {
             .foregroundStyle(DS.Color.ink2)
             .padding(.horizontal, label == nil ? 8 : 9)
             .frame(height: 26)
-            .background(
-                RoundedRectangle(cornerRadius: DS.Radius.sm, style: .continuous)
-                    .fill(primary ? DS.Color.surface2 : DS.Color.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: DS.Radius.sm, style: .continuous)
-                    .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-            )
+            .dsCard(cornerRadius: DS.Radius.sm, fill: primary ? DS.Color.surface2 : DS.Color.surface)
         }
         .buttonStyle(.plain)
+        .hoverLift()
     }
 }
 
@@ -320,13 +316,10 @@ private struct AISummaryCard: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
-                .fill(DS.Color.accentSoft)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
-                .stroke(DS.Color.accent.opacity(0.15), lineWidth: DS.Stroke.hairline)
+        .dsCard(
+            cornerRadius: DS.Radius.md,
+            fill: DS.Color.accentSoft,
+            stroke: DS.Color.accent.opacity(0.15)
         )
     }
 }
@@ -346,6 +339,7 @@ private struct AttachmentCard: View {
                 RoundedRectangle(cornerRadius: DS.Radius.sm, style: .continuous)
                     .fill(tint)
                     .frame(width: 28, height: 28)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm, style: .continuous))
                 Text(ext.uppercased())
                     .font(DS.Font.mono(9, weight: .bold))
                     .tracking(0.3)
@@ -366,14 +360,7 @@ private struct AttachmentCard: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(minWidth: 200)
-        .background(
-            RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
-                .fill(DS.Color.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
-                .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-        )
+        .dsCard(cornerRadius: DS.Radius.md)
     }
 }
 
@@ -449,21 +436,17 @@ private struct QuickReplyBox: View {
                         RoundedRectangle(cornerRadius: DS.Radius.sm, style: .continuous)
                             .fill(DS.Color.accent)
                     )
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm, style: .continuous))
+                    .compositingGroup()
                 }
                 .buttonStyle(.plain)
+                .hoverLift()
                 .padding(.leading, 6)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .background(DS.Color.surface2)
         }
-        .background(
-            RoundedRectangle(cornerRadius: DS.Radius.lg, style: .continuous)
-                .fill(DS.Color.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: DS.Radius.lg, style: .continuous)
-                .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-        )
+        .dsCard(cornerRadius: DS.Radius.lg)
     }
 }

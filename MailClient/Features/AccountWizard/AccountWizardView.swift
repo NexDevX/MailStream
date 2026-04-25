@@ -54,14 +54,7 @@ struct AccountWizardView: View {
                 DSIcon(name: .chevronLeft, size: 12)
                     .foregroundStyle(DS.Color.ink3)
                     .frame(width: 22, height: 22)
-                    .background(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(DS.Color.surface)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-                    )
+                    .dsCard(cornerRadius: 5)
             }
             .buttonStyle(.plain)
             Text(isChinese ? "添加邮箱账号" : "Add an account")
@@ -137,14 +130,8 @@ struct AccountWizardView: View {
                 .lineSpacing(2)
         }
         .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(DS.Color.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .dsCard(cornerRadius: 8)
     }
 
     // MARK: – Right content
@@ -197,6 +184,7 @@ struct AccountWizardView: View {
                         RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
                             .fill(DS.Color.accent)
                     )
+                    .compositingGroup()
                 }
                 .buttonStyle(.plain)
             }
@@ -241,18 +229,17 @@ struct AccountWizardView: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
             }
-            .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
             .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isSelected ? tint.opacity(0.08) : DS.Color.surface2)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(isSelected ? tint.opacity(0.6) : DS.Color.line, lineWidth: isSelected ? 1.2 : DS.Stroke.hairline)
+            .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
+            .dsCard(
+                cornerRadius: 10,
+                fill: isSelected ? tint.opacity(0.08) : DS.Color.surface2,
+                stroke: isSelected ? tint.opacity(0.6) : DS.Color.line,
+                strokeWidth: isSelected ? 1.2 : DS.Stroke.hairline
             )
         }
         .buttonStyle(.plain)
+        .animation(DS.Motion.snap, value: isSelected)
     }
 
     private func providerHint(_ provider: MailProviderType) -> String {
@@ -403,6 +390,7 @@ struct AccountWizardView: View {
                         RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
                             .fill(DS.Color.accent)
                     )
+                    .compositingGroup()
             }
             .buttonStyle(.plain)
             .padding(.top, 10)
@@ -442,14 +430,7 @@ struct AccountWizardView: View {
             .font(DS.Font.sans(13))
             .padding(.horizontal, 10)
             .frame(height: 32)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(DS.Color.surface2)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-            )
+            .dsCard(cornerRadius: 6, fill: DS.Color.surface2)
         }
     }
 
@@ -469,14 +450,7 @@ struct AccountWizardView: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 38)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(DS.Color.surface2)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-        )
+        .dsCard(cornerRadius: 8, fill: DS.Color.surface2)
     }
 
     private func pill(text: String, tint: Color) -> some View {

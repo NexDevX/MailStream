@@ -31,21 +31,15 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
                 Button {
-                    appState.route = .mail
+                    withAnimation(DS.Motion.surface) { appState.route = .mail }
                 } label: {
                     DSIcon(name: .chevronLeft, size: 12)
                         .foregroundStyle(DS.Color.ink3)
                         .frame(width: 22, height: 22)
-                        .background(
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .fill(DS.Color.surface)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-                        )
+                        .dsCard(cornerRadius: 5)
                 }
                 .buttonStyle(.plain)
+                .hoverLift()
                 Text(appState.strings.settings)
                     .font(DS.Font.sans(14, weight: .semibold))
                     .foregroundStyle(DS.Color.ink)
@@ -85,7 +79,7 @@ struct SettingsView: View {
             .padding(.horizontal, 9)
             .frame(height: 28)
             .background(
-                ZStack {
+                Group {
                     if isSelected {
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
                             .fill(DS.Color.selected)
@@ -93,6 +87,7 @@ struct SettingsView: View {
                     }
                 }
             )
+            .compositingGroup()
         }
         .buttonStyle(.plain)
     }
@@ -177,8 +172,11 @@ struct SettingsView: View {
                         RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
                             .fill(DS.Color.accent)
                     )
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous))
+                    .compositingGroup()
                 }
                 .buttonStyle(.plain)
+                .hoverLift()
             }
 
             if let status = appState.mailboxStatusMessage {
@@ -194,14 +192,7 @@ struct SettingsView: View {
                     message: appState.strings.noAccountsMessage
                 )
                 .frame(maxWidth: .infinity, minHeight: 180)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(DS.Color.surface)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-                )
+                .dsCard()
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(appState.accounts.enumerated()), id: \.element.id) { index, account in
@@ -220,14 +211,7 @@ struct SettingsView: View {
                         }
                     }
                 }
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(DS.Color.surface)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-                )
+                .dsCard()
             }
         }
     }
@@ -324,15 +308,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        VStack(spacing: 0) { content() }
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(DS.Color.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-            )
+        VStack(spacing: 0) { content() }.dsCard()
     }
 
     private func settingRow<Trailing: View>(label: String, @ViewBuilder trailing: () -> Trailing) -> some View {
@@ -456,14 +432,7 @@ private struct AccountListRow: View {
                             .foregroundStyle(DS.Color.ink2)
                             .padding(.horizontal, 10)
                             .frame(height: 26)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .fill(DS.Color.surface2)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-                            )
+                            .dsCard(cornerRadius: 6, fill: DS.Color.surface2)
                         }
                         .buttonStyle(.plain)
 
@@ -477,6 +446,8 @@ private struct AccountListRow: View {
                                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                                         .fill(DS.Color.red.opacity(0.10))
                                 )
+                                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                .compositingGroup()
                         }
                         .buttonStyle(.plain)
                     }
@@ -509,7 +480,9 @@ private struct AccountListRow: View {
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
-        .background(Capsule(style: .continuous).fill(tint.opacity(0.10)))
+        .background(Capsule(style: .continuous).fill(tint.opacity(0.12)))
+        .clipShape(Capsule(style: .continuous))
+        .compositingGroup()
     }
 
     private var syncText: String {
@@ -534,9 +507,6 @@ private struct AccountListRow: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 30)
-        .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(DS.Color.surface2)
-        )
+        .dsCard(cornerRadius: 6, fill: DS.Color.surface2, stroke: nil)
     }
 }

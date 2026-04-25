@@ -100,17 +100,19 @@ struct ComposeTabsView: View {
         .padding(.horizontal, 8)
         .frame(height: 28)
         .background(
-            ZStack {
+            Group {
                 if isActive {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(DS.Color.surface)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .strokeBorder(DS.Color.line, lineWidth: DS.Stroke.hairline)
+                        )
                         .matchedGeometryEffect(id: "composeTabBg", in: tabNamespace)
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-                        .matchedGeometryEffect(id: "composeTabBorder", in: tabNamespace)
                 }
             }
         )
+        .compositingGroup()
         .contentShape(Rectangle())
         .onTapGesture {
             withAnimation(DS.Motion.snap) {
@@ -183,14 +185,7 @@ private struct ComposeEditor: View {
                 }
                 .padding(.horizontal, 8)
                 .frame(height: 24)
-                .background(
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(DS.Color.surface2)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-                )
+                .dsCard(cornerRadius: 5, fill: DS.Color.surface2)
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -311,14 +306,7 @@ private struct ComposeEditor: View {
                 .foregroundStyle(DS.Color.ink2)
                 .padding(.horizontal, 10)
                 .frame(height: 28)
-                .background(
-                    RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
-                        .fill(DS.Color.surface2)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
-                        .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-                )
+                .dsCard(cornerRadius: DS.Radius.md, fill: DS.Color.surface2)
             }
             .buttonStyle(.plain)
 
@@ -338,9 +326,12 @@ private struct ComposeEditor: View {
                     RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
                         .fill(DS.Color.accent.opacity(sendDisabled ? 0.5 : 1))
                 )
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous))
+                .compositingGroup()
             }
             .buttonStyle(.plain)
             .disabled(sendDisabled)
+            .hoverLift()
             .keyboardShortcut(.return, modifiers: .command)
             .padding(.leading, 4)
         }

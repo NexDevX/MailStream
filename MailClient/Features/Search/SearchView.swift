@@ -52,14 +52,7 @@ struct SearchView: View {
                 DSIcon(name: .chevronLeft, size: 12)
                     .foregroundStyle(DS.Color.ink3)
                     .frame(width: 28, height: 28)
-                    .background(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(DS.Color.surface)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-                    )
+                    .dsCard(cornerRadius: 5)
             }
             .buttonStyle(.plain)
 
@@ -80,14 +73,7 @@ struct SearchView: View {
             }
             .padding(.horizontal, 12)
             .frame(height: 36)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(DS.Color.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-            )
+            .dsCard(cornerRadius: 8)
 
             Spacer()
 
@@ -152,13 +138,13 @@ struct SearchView: View {
                     }
                     .padding(.horizontal, 9)
                     .frame(height: 24)
-                    .background(
-                        Capsule(style: .continuous).fill(DS.Color.surface)
-                    )
+                    .background(Capsule(style: .continuous).fill(DS.Color.surface))
+                    .clipShape(Capsule(style: .continuous))
                     .overlay(
                         Capsule(style: .continuous)
-                            .stroke(DS.Color.line, style: StrokeStyle(lineWidth: DS.Stroke.hairline, dash: [3, 3]))
+                            .strokeBorder(DS.Color.line, style: StrokeStyle(lineWidth: DS.Stroke.hairline, dash: [3, 3]))
                     )
+                    .compositingGroup()
                 }
                 .buttonStyle(.plain)
             }
@@ -183,7 +169,9 @@ struct SearchView: View {
         .padding(.horizontal, 9)
         .frame(height: 24)
         .background(Capsule(style: .continuous).fill(DS.Color.surface2))
-        .overlay(Capsule(style: .continuous).stroke(DS.Color.line, lineWidth: DS.Stroke.hairline))
+        .clipShape(Capsule(style: .continuous))
+        .overlay(Capsule(style: .continuous).strokeBorder(DS.Color.line, lineWidth: DS.Stroke.hairline))
+        .compositingGroup()
     }
 
     // MARK: – Facets
@@ -320,14 +308,7 @@ struct SearchView: View {
                     }
                 }
             }
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(DS.Color.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(DS.Color.line, lineWidth: DS.Stroke.hairline)
-            )
+            .dsCard()
         }
     }
 

@@ -9,13 +9,6 @@ struct Kbd: View {
             .foregroundStyle(DS.Color.ink3)
             .padding(.horizontal, 5)
             .frame(minWidth: 14, minHeight: 16)
-            .background(
-                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .fill(DS.Color.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .stroke(DS.Color.lineStrong, lineWidth: DS.Stroke.hairline)
-            )
+            .dsCard(cornerRadius: 3, stroke: DS.Color.lineStrong)
     }
 }
