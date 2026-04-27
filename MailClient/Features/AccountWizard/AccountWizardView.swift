@@ -10,10 +10,18 @@ struct AccountWizardView: View {
     @State private var emailAddress = ""
     @State private var secret = ""
 
+    /// `connecting` is a transient step inserted between `sync` and `done`.
+    /// We jump into it instantly on tap so the user sees motion immediately,
+    /// while the actual network call runs in the background.
     enum WizardStep: Int, CaseIterable, Identifiable {
-        case provider, authorize, sync, done
+        case provider, authorize, sync, connecting, done
         var id: Int { rawValue }
+        static var visibleSteps: [WizardStep] { [.provider, .authorize, .sync, .done] }
     }
+
+    /// Inline error from the connecting step — surfaced to the user without
+    /// kicking them back to the form.
+    @State private var connectError: String?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -32,7 +40,7 @@ struct AccountWizardView: View {
             header
 
             VStack(alignment: .leading, spacing: 4) {
-                ForEach(WizardStep.allCases) { step in
+                ForEach(WizardStep.visibleSteps) { step in
                     stepRow(step)
                 }
             }
@@ -65,8 +73,12 @@ struct AccountWizardView: View {
     }
 
     private func stepRow(_ step: WizardStep) -> some View {
+        // `connecting` is rendered as the `done` step's active state — the
+        // user sees the last step animating without the sidebar gaining
+        // an extra row.
+        let normalizedCurrent: WizardStep = (currentStep == .connecting) ? .done : currentStep
         let index = step.rawValue
-        let current = currentStep.rawValue
+        let current = normalizedCurrent.rawValue
         let isActive = index == current
         let isDone = index < current
 
@@ -102,14 +114,16 @@ struct AccountWizardView: View {
 
     private func stepLabel(_ step: WizardStep) -> String {
         switch (step, isChinese) {
-        case (.provider,  true):  return "选择服务商"
-        case (.authorize, true):  return "授权登录"
-        case (.sync,      true):  return "同步设置"
-        case (.done,      true):  return "完成"
-        case (.provider,  false): return "Choose provider"
-        case (.authorize, false): return "Authorize"
-        case (.sync,      false): return "Sync settings"
-        case (.done,      false): return "Done"
+        case (.provider,   true):  return "选择服务商"
+        case (.authorize,  true):  return "授权登录"
+        case (.sync,       true):  return "同步设置"
+        case (.connecting, true):  return "连接中"
+        case (.done,       true):  return "完成"
+        case (.provider,   false): return "Choose provider"
+        case (.authorize,  false): return "Authorize"
+        case (.sync,       false): return "Sync settings"
+        case (.connecting, false): return "Connecting"
+        case (.done,       false): return "Done"
         }
     }
 
@@ -138,12 +152,21 @@ struct AccountWizardView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch currentStep {
-        case .provider:  providerStep
-        case .authorize: authorizeStep
-        case .sync:      syncStep
-        case .done:      doneStep
+        Group {
+            switch currentStep {
+            case .provider:   providerStep
+            case .authorize:  authorizeStep
+            case .sync:       syncStep
+            case .connecting: connectingStep
+            case .done:       doneStep
+            }
         }
+        .id(currentStep)
+        .transition(.asymmetric(
+            insertion: .opacity.combined(with: .offset(y: 6)),
+            removal:   .opacity.combined(with: .offset(y: -6))
+        ))
+        .animation(DS.Motion.surface, value: currentStep)
     }
 
     private var providerStep: some View {
@@ -345,6 +368,13 @@ struct AccountWizardView: View {
                 Spacer()
 
                 Button {
+                    // Visual feedback first — flip to the connecting step
+                    // *synchronously* before kicking the network task. This
+                    // is what makes the click feel snappy.
+                    withAnimation(DS.Motion.surface) {
+                        connectError = nil
+                        currentStep = .connecting
+                    }
                     Task { await connect() }
                 } label: {
                     Text(isChinese ? "完成接入" : "Finish & connect")
@@ -362,6 +392,79 @@ struct AccountWizardView: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    /// Transient "connecting" view. Lightweight: a single PulseRing wrapped
+    /// inside a gentle scale-pulse and a status line. No timer, no progress
+    /// bar — it stops repainting the moment we transition out.
+    private var connectingStep: some View {
+        VStack(spacing: 18) {
+            ZStack {
+                Circle()
+                    .fill(DS.Color.accent.opacity(0.10))
+                    .frame(width: 84, height: 84)
+                PulseRing(color: DS.Color.accent, size: 12)
+            }
+            VStack(spacing: 6) {
+                Text(connectError == nil
+                     ? (isChinese ? "正在连接 \(providerType.displayName(language: appState.language))…"
+                                  : "Connecting to \(providerType.displayName(language: appState.language))…")
+                     : (isChinese ? "连接遇到问题" : "Connection failed"))
+                    .font(DS.Font.sans(14, weight: .semibold))
+                    .foregroundStyle(DS.Color.ink)
+                    .contentTransition(.opacity)
+                Text(connectError ?? (isChinese
+                     ? "正在验证授权码并拉取文件夹列表，通常 1–2 秒。"
+                     : "Validating credentials and listing folders. Usually under 2s."))
+                    .font(DS.Font.sans(12))
+                    .foregroundStyle(connectError == nil ? DS.Color.ink3 : DS.Color.red)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 360)
+            }
+            if connectError != nil {
+                HStack(spacing: 10) {
+                    Button {
+                        withAnimation(DS.Motion.surface) {
+                            connectError = nil
+                            currentStep = .authorize
+                        }
+                    } label: {
+                        Text(isChinese ? "返回修改" : "Back to form")
+                            .font(DS.Font.sans(12, weight: .medium))
+                            .foregroundStyle(DS.Color.ink2)
+                            .padding(.horizontal, 14)
+                            .frame(height: 28)
+                            .dsCard(cornerRadius: DS.Radius.md, fill: DS.Color.surface2)
+                    }
+                    .buttonStyle(.plain)
+                    .hoverLift()
+
+                    Button {
+                        withAnimation(DS.Motion.surface) {
+                            connectError = nil
+                            currentStep = .connecting
+                        }
+                        Task { await connect() }
+                    } label: {
+                        Text(isChinese ? "重试" : "Retry")
+                            .font(DS.Font.sans(12, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 16)
+                            .frame(height: 28)
+                            .background(
+                                RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
+                                    .fill(DS.Color.accent)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous))
+                            .compositingGroup()
+                    }
+                    .buttonStyle(.plain)
+                    .hoverLift()
+                }
+                .padding(.top, 6)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var doneStep: some View {
@@ -470,13 +573,31 @@ struct AccountWizardView: View {
     }
 
     private func connect() async {
+        // Note: appState.connectAccount swallows errors and writes them to
+        // mailboxStatusMessage. We treat any non-success status (i.e. the
+        // account didn't actually become connected) as a failure to show
+        // inline. This is a defensive read until we surface a thrown error
+        // from connectAccount.
+        let beforeAccountIDs = Set(appState.accounts.map(\.id))
         await appState.connectAccount(
             providerType: providerType,
             displayName: displayName.isEmpty ? emailAddress : displayName,
             emailAddress: emailAddress,
             secret: secret
         )
-        currentStep = .done
+        let connected = appState.accounts.first {
+            beforeAccountIDs.contains($0.id) == false && $0.emailAddress.lowercased() == emailAddress.lowercased()
+        }
+        await MainActor.run {
+            withAnimation(DS.Motion.surface) {
+                if connected != nil {
+                    currentStep = .done
+                } else {
+                    connectError = appState.mailboxStatusMessage
+                        ?? (isChinese ? "未能连接，请检查地址和授权码。" : "Couldn't connect — please check the address and code.")
+                }
+            }
+        }
     }
 
     private var isChinese: Bool { appState.language == .simplifiedChinese }

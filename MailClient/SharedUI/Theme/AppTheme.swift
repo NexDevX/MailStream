@@ -48,39 +48,79 @@ enum AppTheme {
         let detailMinWidth: CGFloat
         let detailContentWidth: CGFloat
         let detailHorizontalPadding: CGFloat
+        /// Auto-collapse the sidebar below this width regardless of the
+        /// user's manual toggle. False at the wide breakpoints.
+        let sidebarAutoCollapses: Bool
+        /// True when the window is narrow enough that list + detail
+        /// can't both fit comfortably side by side. RootView switches to
+        /// a drilldown (one-pane-at-a-time) layout in this regime.
+        let prefersDrilldown: Bool
     }
 
+    /// Three breakpoints, three regimes:
+    ///
+    /// - ≥ 1180  full three-pane layout
+    /// - 840–1180 sidebar collapses to icon strip (or hidden), list+detail
+    /// - < 840    drilldown — list OR detail, never both at once
+    ///
+    /// Below 720 we never go (window minWidth in MailClientApp).
     static func layout(for size: CGSize) -> LayoutMetrics {
-        if size.width < 1040 {
+        if size.width < 840 {
+            // Drilldown regime — single pane fills the window. The
+            // active pane width matters; min/ideal/max fold to the
+            // available width.
             return LayoutMetrics(
-                sidebarWidth: 200,
-                listMinWidth: 360,
-                listIdealWidth: 400,
-                listMaxWidth: 440,
-                detailMinWidth: 460,
-                detailContentWidth: 640,
-                detailHorizontalPadding: 28
+                sidebarWidth: 0,                       // hidden
+                listMinWidth: max(360, size.width - 8),
+                listIdealWidth: size.width,
+                listMaxWidth: .infinity,
+                detailMinWidth: max(360, size.width - 8),
+                detailContentWidth: max(420, size.width - 80),
+                detailHorizontalPadding: 20,
+                sidebarAutoCollapses: true,
+                prefersDrilldown: true
             )
         }
-        if size.width < 1360 {
+        // Sidebar is always toggleable above the drilldown threshold —
+        // users on big monitors still appreciate hiding chrome to focus
+        // on the inbox. AppState.isSidebarVisible is the live source of
+        // truth.
+        if size.width < 1180 {
+            return LayoutMetrics(
+                sidebarWidth: 200,
+                listMinWidth: 280,
+                listIdealWidth: 360,
+                listMaxWidth: 520,
+                detailMinWidth: 440,
+                detailContentWidth: 640,
+                detailHorizontalPadding: 26,
+                sidebarAutoCollapses: true,
+                prefersDrilldown: false
+            )
+        }
+        if size.width < 1480 {
             return LayoutMetrics(
                 sidebarWidth: 216,
-                listMinWidth: 420,
-                listIdealWidth: 460,
-                listMaxWidth: 500,
+                listMinWidth: 300,
+                listIdealWidth: 440,
+                listMaxWidth: 600,
                 detailMinWidth: 540,
                 detailContentWidth: 680,
-                detailHorizontalPadding: 36
+                detailHorizontalPadding: 36,
+                sidebarAutoCollapses: true,
+                prefersDrilldown: false
             )
         }
         return LayoutMetrics(
             sidebarWidth: 232,
-            listMinWidth: 460,
-            listIdealWidth: 480,
-            listMaxWidth: 520,
+            listMinWidth: 320,
+            listIdealWidth: 460,
+            listMaxWidth: 700,
             detailMinWidth: 620,
             detailContentWidth: 680,
-            detailHorizontalPadding: 44
+            detailHorizontalPadding: 44,
+            sidebarAutoCollapses: true,
+            prefersDrilldown: false
         )
     }
 }

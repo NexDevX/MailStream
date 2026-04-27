@@ -43,7 +43,10 @@ actor MailSyncService {
             throw MailServiceError.accountNotConfigured
         }
 
-        var inboxMessages: [MailMessage] = []
+        // Aggregate header + body separately so we can hit the two
+        // repository planes without juggling tuples.
+        var fetchedHeaders: [MailMessage] = []
+        var fetchedBodies: [(UUID, MailMessageBody)] = []
         var firstError: Error?
 
         for account in accounts {
@@ -51,25 +54,35 @@ actor MailSyncService {
                 let credentials = try await accountService.credentials(for: account)
                 let provider = try await accountService.provider(for: account)
                 let accountMessages = try await provider.fetchInbox(account: account, credentials: credentials, limit: 12)
-                inboxMessages.append(contentsOf: accountMessages)
+                for parsed in accountMessages {
+                    fetchedHeaders.append(parsed.header)
+                    fetchedBodies.append((parsed.header.id, parsed.body))
+                }
                 await accountService.markSyncSuccess(for: account.id)
             } catch {
-                if firstError == nil {
-                    firstError = error
-                }
+                if firstError == nil { firstError = error }
                 await accountService.markSyncFailure(for: account.id, message: error.localizedDescription)
             }
         }
 
-        if inboxMessages.isEmpty, let firstError {
+        if fetchedHeaders.isEmpty, let firstError {
             throw firstError
         }
 
+        // Header plane: full list rebuild (preserve local-only items
+        // such as drafts/sent that didn't come from the server).
         let existingMessages = await repository.loadMessages()
         let localMessages = existingMessages.filter { $0.sidebarItem != .allMail }
-        let sortedMessages = inboxMessages.sorted { $0.timestampLabel > $1.timestampLabel }
+        let sortedMessages = fetchedHeaders.sorted { $0.timestampLabel > $1.timestampLabel }
         await repository.saveMessages(sortedMessages + localMessages)
-        return inboxMessages.count
+
+        // Body plane: persist each body so the detail view's lazy load
+        // is a cache hit on first open.
+        for (id, body) in fetchedBodies {
+            await repository.storeBody(messageID: id, body: body)
+        }
+
+        return fetchedHeaders.count
     }
 
     func send(_ message: OutgoingMailMessage, preferredAccountID: UUID?) async throws -> MailMessage {
@@ -85,12 +98,16 @@ actor MailSyncService {
         let provider = try await accountService.provider(for: account)
         try await provider.send(message: message, account: account, credentials: credentials)
 
-        let sentMessage = makeLocalSentMessage(message, account: account)
-        await repository.appendMessage(sentMessage)
-        return sentMessage
+        let parsed = makeLocalSentMessage(message, account: account)
+        await repository.appendMessage(parsed.header)
+        await repository.storeBody(messageID: parsed.header.id, body: parsed.body)
+        return parsed.header
     }
 
-    private func makeLocalSentMessage(_ message: OutgoingMailMessage, account: MailAccount) -> MailMessage {
+    /// Build a local Sent-folder mirror of an outgoing message. The header
+    /// goes to the message list; body goes to the cache so re-opening the
+    /// thread doesn't surprise the user with an empty pane.
+    private func makeLocalSentMessage(_ message: OutgoingMailMessage, account: MailAccount) -> ParsedRawMessage {
         let trimmedBody = message.body.trimmingCharacters(in: .whitespacesAndNewlines)
         let paragraphs = trimmedBody
             .components(separatedBy: "\n\n")
@@ -108,7 +125,7 @@ actor MailSyncService {
         longTimeFormatter.dateStyle = .medium
         longTimeFormatter.timeStyle = .short
 
-        return MailMessage(
+        let header = MailMessage(
             accountID: account.id,
             sidebarItem: .sent,
             inboxFilter: .inbox,
@@ -120,10 +137,13 @@ actor MailSyncService {
             preview: String(preview),
             timestampLabel: shortTimeFormatter.string(from: now),
             relativeTimestamp: longTimeFormatter.string(from: now),
-            isPriority: false,
-            bodyParagraphs: paragraphs.isEmpty ? [trimmedBody] : paragraphs,
+            isPriority: false
+        )
+        let body = MailMessageBody(
+            paragraphs: paragraphs.isEmpty ? [trimmedBody] : paragraphs,
             highlights: [],
             closing: ""
         )
+        return ParsedRawMessage(header: header, body: body)
     }
 }

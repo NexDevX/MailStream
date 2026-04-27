@@ -1,88 +1,144 @@
-# Architecture Baseline
+# MailStream Architecture
 
 ## Goals
 
 - Keep UI work fast without letting view code absorb business logic
 - Make mailbox data sources replaceable without rewriting screens
+- Persist a local cache so users don't pay network cost on every launch
 - Keep macOS-specific behavior isolated from domain and feature code
+- Tight memory budget: header-only in steady state, body on demand
 - Preserve a clean path from local build to CI release artifacts
 
-## Repository Layers
+## Layered Topology
 
-### Product Source
+```
+┌─────────────── UI (SwiftUI) ─────────────┐
+│  Features  ⇄  AppState (@MainActor)      │
+└────────────────────┬─────────────────────┘
+                     │ Combine publishers
+┌────────────────────┴─────────────────────┐
+│  Application Services (actor)            │
+│   · MailSyncEngine                       │
+│   · AccountManager                       │
+└──┬───────────────────────────┬───────────┘
+   │                           │
+┌──┴────────────────────┐  ┌───┴────────────────────┐
+│  Provider Adapters    │  │  Persistence (SQLite)  │
+│   · QQMailAdapter     │  │   · MailDatabase       │
+│   · GmailAdapter      │  │   · MessageDAO         │
+│   · OutlookAdapter    │  │   · FolderDAO          │
+│   · ICloudAdapter     │  │   · AccountDAO         │
+│   · GenericIMAP       │  │   · SyncStateDAO       │
+└───────────────────────┘  └────────────────────────┘
+                                     │
+                          ~/Library/Application Support/
+                                MailStream/mailstream.sqlite
+```
 
-- `MailClient/App`
-  - Application entrypoint
-  - Dependency composition
-  - Global app state
-- `MailClient/Core`
-  - Domain models
-  - Service protocols
-  - Repository contracts
-  - Storage implementations
-  - Logging and utilities
-- `MailClient/Features`
-  - Feature-facing views and feature-local presentation logic
-- `MailClient/SharedUI`
-  - Reusable components, theme tokens, and shared styles
-- `MailClient/Platform`
-  - macOS-specific bridging and desktop integration
-- `MailClient/Tests`
-  - Unit and integration-style tests for the app module
+## Module / Folder Layout
 
-### Engineering Infrastructure
-
-- `.github/workflows`
-  - CI build and release automation
-- `scripts`
-  - Deterministic local and CI entrypoints
-- `docs`
-  - Architectural and release documentation
-- `project.yml`
-  - XcodeGen source of truth for the Xcode project
-- `Makefile`
-  - Consistent developer command entrypoints
+```
+MailClient/
+├── App/                  Composition root, AppState, routing, scene
+├── Domain/ (Core/Models) Pure data types — no SwiftUI / no IO
+├── Persistence/          SQLite cache layer (one connection, many DAOs)
+│   ├── SQLite.swift
+│   ├── MailDatabase.swift
+│   ├── Schema/V1_Initial.swift
+│   └── DAO/AccountDAO|FolderDAO|MessageDAO|SyncStateDAO.swift
+├── Services/
+│   ├── Providers/        Adapters per backend (QQ, Gmail, Outlook, …)
+│   ├── MailSyncEngine    Coordinates fetch → DAO → publish
+│   ├── AccountManager    Owns credentials + status
+│   └── CredentialsStore  Keychain wrapper
+├── Features/             SwiftUI screens (header-summary driven)
+├── SharedUI/             Design system + reusable controls
+├── Platform/             macOS-specific bridging
+├── Resources/
+└── Tests/
+```
 
 ## Dependency Rules
 
-- `App` can depend on every product layer
-- `Core` must not import `SwiftUI` or feature modules
-- `Features` can depend on `Core`, `SharedUI`, and `Platform`
-- `Platform` must not own product business logic
+- `App` may depend on every product layer
+- `Domain` must not import `SwiftUI` or `Persistence`
+- `Persistence` must not import `Services` or `Features`
+- `Services` may depend on `Domain` and `Persistence` only
+- `Features` may depend on `Domain`, `SharedUI`, `App` (for AppState)
 - `SharedUI` must stay presentation-only
-- Workflows and scripts cannot become a second source of truth for app structure
 
-## Data Flow
+## Data Flow (Steady State)
 
-1. `MailClientApp` builds the dependency container
-2. `AppContainer` provides repositories and long-lived services
-3. `AppState` reads initial mailbox state through `MailRepository`
-4. `Features` render from `AppState`
-5. `MailSyncService` can later refresh repositories without changing the feature layer contract
+1. App launch → `AppContainer` opens `MailDatabase` (runs migrations)
+2. `AccountDAO.all()` populates `AppState.accounts` synchronously
+3. `MessageDAO.summariesForAccount(...)` hydrates the inbox **header-only**
+4. UI renders from summaries (≤ 1 KB per row → 5 MB for 5 000 messages)
+5. User opens a message → `MessageDAO.body(id:)` hits cache, or
+   `MailSyncEngine.fetchBody(...)` triggers provider call + `storeBody`
+6. `MailSyncEngine.refresh(account:)` runs every N min:
+   a. List folders via adapter
+   b. For each folder, read `SyncStateDAO.cursor`, fetch headers `> lastUID`
+   c. Bulk-upsert via `MessageDAO.upsertHeader` inside a transaction
+   d. Write new `SyncCursor` back
 
-## Current Implementations
+## Memory Strategy
 
-- `MailRepository`
-  - Contract for loading mailbox data
-- `InMemoryMailRepository`
-  - Seed-backed implementation for the current prototype
-- `SeedMailboxData`
-  - Static fixture source isolated from the domain model
+- **Headers only in RAM**. Body columns are nulled out via
+  `MailDatabase.evictBodies(olderThan:)` on app idle (default: 7 days).
+- `MailMessageSummary` is a value type with only essentials; bulky
+  `bodyText` / `bodyHtml` live in SQLite and are dropped after view.
+- LazyVStack ensures only visible rows allocate row views.
+- WAL mode + `PRAGMA cache_size=-8000` caps page cache around 8 MiB.
+- `mmap_size = 128 MiB` so the OS — not us — manages the working set.
 
-This keeps the prototype data in the storage layer, not in the model layer.
+## Provider Adapter Contract
+
+Every adapter is **stateless** and `Sendable`. It maps three operations
+into the cache-friendly shape:
+
+```
+listFolders(account)          → [RemoteFolder]
+fetchHeaders(folder, cursor)  → ([RemoteHeader], newCursor)
+fetchBody(folder, remoteUID)  → RemoteBody
+send(message)                 → Message-ID?
+updateFlags(remoteUID, flags) → ()
+```
+
+Adapters never write the DB. The sync engine is the single writer.
+
+## Schema (V1)
+
+| Table          | Purpose                                                |
+| -------------- | ------------------------------------------------------ |
+| `accounts`     | Connected mailboxes (mirrored to `MailAccount`)        |
+| `folders`      | Per-account folders, mapped to a normalized role enum  |
+| `messages`     | UID-keyed headers; body is lazy via `body_loaded`      |
+| `attachments`  | Metadata; binaries live on disk under `Caches/`        |
+| `sync_state`   | Per-folder cursor (lastUID, UIDVALIDITY, MODSEQ)       |
+| `drafts`       | Local-only compose drafts                              |
+| `messages_fts` | FTS5 virtual table for unified search                  |
+
+All times are UNIX milliseconds. Strings are UTF-8. FK CASCADE on delete.
+
+## Migrations
+
+Migrations are linear. Each version `Vn` adds a Swift file under
+`Persistence/Schema/Vn_*.swift`. `MailDatabase.migrate()` checks
+`schema_version` and applies missing steps, in a single transaction per
+step. Never edit a shipped V1 — always add V2.
 
 ## Release Flow
 
-- `make package` or `./scripts/build_dmg.sh`
-  - Local DMG build
-- `push main`
-  - GitHub Actions builds a DMG and refreshes the `latest-main` prerelease
-- `push v* tag`
-  - GitHub Actions builds a DMG and publishes a tagged GitHub Release
+- `make package` / `./scripts/build_dmg.sh` — local DMG
+- `push main` — GitHub Actions → `latest-main` prerelease
+- `push v* tag` — GitHub Actions → tagged release
 
-## Next Engineering Steps
+## Roadmap
 
-- Replace `InMemoryMailRepository` with a local persistence-backed repository
-- Split feature views from feature-specific view models once interactions grow
-- Add signed release and notarization scripts
-- Introduce lint and formatting in CI once the code surface grows
+- Wire `MailSyncEngine` end-to-end (currently QQMailService is the legacy
+  monolith — being decomposed into `QQMailAdapter`)
+- Implement `GmailAdapter` (OAuth2 + Gmail API)
+- Implement `OutlookAdapter` (MSAL + Microsoft Graph)
+- Add a single `Tests/Persistence/` suite covering migrations + DAO
+- Add background polling timer with `NSBackgroundActivityScheduler`
+- Add per-folder sync prioritization (inbox first, archive last)

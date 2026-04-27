@@ -52,6 +52,12 @@ actor FileBackedMailRepository: MailRepository {
         await saveMessages(currentMessages)
     }
 
+    // FileBackedMailRepository is the legacy JSON-on-disk store, kept only
+    // as a fallback. Body persistence isn't supported here — production
+    // code uses `MailStoreRepository`.
+    func loadBody(messageID: UUID) async -> MailMessageBody? { nil }
+    func storeBody(messageID: UUID, body: MailMessageBody) async { /* no-op */ }
+
     static func defaultFileURL() -> URL {
         let baseDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)

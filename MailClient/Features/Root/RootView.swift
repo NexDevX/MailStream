@@ -2,6 +2,9 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var appState: AppState
+    /// User-resizable list pane width. Persisted via @AppStorage so the
+    /// user's preference survives relaunches.
+    @AppStorage("mailclient.layout.listWidth") private var listWidth: Double = 460
 
     var body: some View {
         ZStack {
@@ -71,30 +74,108 @@ struct RootView: View {
     private var mailLayout: some View {
         GeometryReader { geometry in
             let layout = AppTheme.layout(for: geometry.size)
+            VStack(spacing: 0) {
+                if layout.prefersDrilldown {
+                    drilldownPane(layout: layout, size: geometry.size)
+                } else {
+                    threePane(layout: layout, size: geometry.size)
+                }
+                StatusBarView()
+            }
+            .background(DS.Color.bg)
+            // When the window crosses a breakpoint that hides drilldown,
+            // make sure we don't get stuck on the detail pane with no
+            // way back to the list.
+            .onChange(of: layout.prefersDrilldown) {
+                if layout.prefersDrilldown == false {
+                    appState.isShowingDetailOverList = false
+                }
+            }
+        }
+    }
+
+    /// Wide / medium regime: sidebar (optional) + list + resizer + detail.
+    @ViewBuilder
+    private func threePane(layout: AppTheme.LayoutMetrics, size: CGSize) -> some View {
+        // The sidebar is visible when the user has it open AND the
+        // breakpoint allows it (≥ 1180 always shows; 840–1180 lets the
+        // user toggle).
+        let sidebarVisible = layout.sidebarAutoCollapses
+            ? appState.isSidebarVisible
+            : true
+        let sidebarTrack = sidebarVisible ? layout.sidebarWidth : 0
+
+        let listMin: CGFloat = layout.listMinWidth
+        let listMax: CGFloat = max(listMin + 40, size.width - sidebarTrack - layout.detailMinWidth)
+        let clampedWidth = min(max(CGFloat(listWidth), listMin), listMax)
+        let bindable = Binding<CGFloat>(
+            get: { clampedWidth },
+            set: { listWidth = Double($0) }
+        )
+
+        HStack(spacing: 0) {
+            if sidebarVisible {
+                SidebarView()
+                    .frame(width: layout.sidebarWidth)
+                    .transition(.move(edge: .leading).combined(with: .opacity))
+            }
 
             VStack(spacing: 0) {
-                HStack(spacing: 0) {
-                    SidebarView()
-                        .frame(width: layout.sidebarWidth)
+                if layout.sidebarAutoCollapses {
+                    SidebarToggleBar(isVisible: $appState.isSidebarVisible)
+                }
+                MessageListView()
+            }
+            .frame(width: clampedWidth)
 
-                    MessageListView()
-                        .frame(
-                            minWidth: layout.listMinWidth,
-                            idealWidth: layout.listIdealWidth,
-                            maxWidth: layout.listMaxWidth
-                        )
+            VerticalResizer(
+                width: bindable,
+                bounds: listMin...listMax,
+                defaultWidth: layout.listIdealWidth
+            )
 
+            MessageDetailView(
+                message: appState.selectedMessage,
+                layout: layout
+            )
+            .frame(minWidth: layout.detailMinWidth, maxWidth: .infinity)
+        }
+        .frame(maxHeight: .infinity)
+        .animation(DS.Motion.surface, value: sidebarVisible)
+    }
+
+    /// Drilldown regime: list OR detail at full width, with a back button
+    /// in the detail header to pop back to the list.
+    @ViewBuilder
+    private func drilldownPane(layout: AppTheme.LayoutMetrics, size: CGSize) -> some View {
+        let showingDetail = appState.isShowingDetailOverList && appState.selectedMessage != nil
+
+        ZStack {
+            if showingDetail {
+                VStack(spacing: 0) {
+                    DrilldownBackBar()
                     MessageDetailView(
                         message: appState.selectedMessage,
                         layout: layout
                     )
-                    .frame(minWidth: layout.detailMinWidth, maxWidth: .infinity)
                 }
-                .frame(maxHeight: .infinity)
-
-                StatusBarView()
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            } else {
+                VStack(spacing: 0) {
+                    DrilldownTopBar()
+                    MessageListView()
+                }
+                .transition(.move(edge: .leading).combined(with: .opacity))
             }
-            .background(DS.Color.bg)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(DS.Motion.surface, value: showingDetail)
+        .onChange(of: appState.selectedMessageID) {
+            // In drilldown, tapping a list row pushes us into the detail
+            // pane. The back bar / Esc returns.
+            if appState.selectedMessageID != nil, showingDetail == false {
+                appState.isShowingDetailOverList = true
+            }
         }
     }
 

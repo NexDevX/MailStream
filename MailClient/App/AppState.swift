@@ -5,6 +5,30 @@ enum InboxFilterChip: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// Information density for the message list rows.
+///
+/// - **compact**: one-liner, ~32pt row. For users who scan dozens of
+///   messages a minute and rely on the time + sender column.
+/// - **cozy** (default): two lines, ~50pt row. Sender + time, then
+///   subject + preview + label.
+/// - **comfortable**: three lines, ~72pt row. Bigger avatar, full
+///   preview wrap, label on its own line. Good when content matters
+///   more than density.
+enum ListDensity: String, CaseIterable, Identifiable, Sendable {
+    case compact, cozy, comfortable
+    var id: String { rawValue }
+
+    /// Row height in points. Used both for layout and as the LazyVStack
+    /// hint so scrolling is smooth at thousands of rows.
+    var rowHeight: CGFloat {
+        switch self {
+        case .compact:     return 32
+        case .cozy:        return 50
+        case .comfortable: return 72
+        }
+    }
+}
+
 enum AppRoute: Hashable {
     case mail
     case onboarding
@@ -54,6 +78,7 @@ struct ComposeDraft: Identifiable, Equatable {
 @MainActor
 final class AppState: ObservableObject {
     private static let languageDefaultsKey = "mailclient.language"
+    private static let densityDefaultsKey  = "mailclient.list.density"
 
     private let repository: any MailRepository
     private let syncService: MailSyncService
@@ -64,7 +89,14 @@ final class AppState: ObservableObject {
     @Published var selectedInboxFilter: InboxFilter = .inbox {
         didSet { syncSelectionIfNeeded() }
     }
-    @Published var selectedMessageID: MailMessage.ID?
+    @Published var selectedMessageID: MailMessage.ID? {
+        didSet { onSelectedMessageChanged() }
+    }
+    /// Body of the currently selected message. `nil` while loading or when
+    /// no message is selected. Detail view observes this directly.
+    @Published private(set) var selectedBody: MailMessageBody?
+    /// `true` while a body fetch is in flight — drives skeleton state.
+    @Published private(set) var isLoadingSelectedBody = false
     @Published var searchText = ""
     @Published var isShowingCompose = false
     @Published var isShowingCommandPalette = false
@@ -90,6 +122,21 @@ final class AppState: ObservableObject {
     /// Set to true once the user dismisses Onboarding manually so RootView
     /// won't force them back when accounts is still empty.
     @Published var hasDismissedOnboarding: Bool = false
+    /// User-controlled sidebar visibility on medium-width windows.
+    /// AppTheme.layout(for:) decides what's *forced* (auto-collapsed below
+    /// 1180); this flag is the user's preference within the band where a
+    /// choice exists.
+    @Published var isSidebarVisible: Bool = true
+    /// True only in the drilldown regime when the user has tapped a
+    /// message — RootView shows the detail pane and hides the list.
+    @Published var isShowingDetailOverList: Bool = false
+    /// Information density for the message list. Persisted per-user via
+    /// UserDefaults; setter writes through automatically.
+    @Published var listDensity: ListDensity {
+        didSet {
+            UserDefaults.standard.set(listDensity.rawValue, forKey: Self.densityDefaultsKey)
+        }
+    }
     @Published var language: AppLanguage {
         didSet {
             UserDefaults.standard.set(language.rawValue, forKey: Self.languageDefaultsKey)
@@ -102,19 +149,66 @@ final class AppState: ObservableObject {
     @Published private(set) var accounts: [MailAccount] = []
     @Published private(set) var messages: [MailMessage]
 
+    /// Optional handle to the SQLite cache. When present, `bootstrap()` runs
+    /// pending migrations before any DAO query. Tests that don't need a
+    /// real DB can leave this nil.
+    private let database: MailDatabase?
+    /// Lazy body loader, owned by AppState. Survives selection churn and
+    /// LRU-evicts on its own.
+    let bodyStore: MailMessageBodyStore
+    /// Tracks the in-flight selected-body task so we can cancel on rapid
+    /// selection changes.
+    private var bodyLoadTask: Task<Void, Never>?
+
     init(
+        database: MailDatabase? = nil,
         repository: any MailRepository,
         syncService: MailSyncService,
-        initialMessages: [MailMessage]
+        initialMessages: [MailMessage],
+        bodyStore: MailMessageBodyStore? = nil
     ) {
+        self.database = database
         self.repository = repository
         self.syncService = syncService
+        self.bodyStore = bodyStore ?? MailMessageBodyStore(repository: repository)
         self.messages = initialMessages
         self.language = AppLanguage(
             rawValue: UserDefaults.standard.string(forKey: Self.languageDefaultsKey) ?? ""
         ) ?? .english
+        self.listDensity = ListDensity(
+            rawValue: UserDefaults.standard.string(forKey: Self.densityDefaultsKey) ?? ""
+        ) ?? .cozy
         self.selectedMessageID = initialMessages.first?.id
         syncSelectionIfNeeded()
+        // didSet doesn't fire during init; kick off the initial body load
+        // explicitly so the detail view doesn't render with a stale body.
+        onSelectedMessageChanged()
+    }
+
+    // MARK: - Selected body loading
+    //
+    // The didSet on `selectedMessageID` calls into here. We keep the body-
+    // load policy in one place so adding ahead-of-time prefetch (next /
+    // previous) is a single-file change later.
+
+    private func onSelectedMessageChanged() {
+        bodyLoadTask?.cancel()
+        selectedBody = nil
+        guard let id = selectedMessageID else {
+            isLoadingSelectedBody = false
+            return
+        }
+        isLoadingSelectedBody = true
+        bodyLoadTask = Task { [weak self] in
+            guard let self else { return }
+            let body = await self.bodyStore.body(for: id)
+            if Task.isCancelled { return }
+            await MainActor.run {
+                guard self.selectedMessageID == id else { return }
+                self.selectedBody = body
+                self.isLoadingSelectedBody = false
+            }
+        }
     }
 
     var strings: AppStrings {
@@ -140,8 +234,11 @@ final class AppState: ObservableObject {
         case .all:       return base.count
         case .unread:    return max(0, base.count - (base.count / 2))
         case .priority:  return base.filter(\.isPriority).count
-        case .attach:    return base.filter { $0.preview.contains("附件") || $0.preview.lowercased().contains("attach") }.count
-        case .mentions:  return base.filter { $0.bodyParagraphs.joined().contains("@") }.count
+        // Body-text isn't loaded for list rows after the F7 split, so we
+        // approximate via attachment metadata + preview text. Real
+        // counts for "@-mentions" will come via FTS once it indexes body.
+        case .attach:    return base.filter { $0.attachments.isEmpty == false || $0.preview.contains("附件") || $0.preview.lowercased().contains("attach") }.count
+        case .mentions:  return base.filter { $0.preview.contains("@") || $0.subject.contains("@") }.count
         }
     }
 
@@ -165,6 +262,18 @@ final class AppState: ObservableObject {
     }
 
     func bootstrap() async {
+        // Run schema migrations before any DAO query. We intentionally
+        // continue even if migration fails so the app can still launch and
+        // surface the error in the status bar — better than a blank UI.
+        if let database {
+            do {
+                try await database.prepare()
+            } catch {
+                MailClientLogger.storage.error("Database prepare failed: \(error.localizedDescription)")
+                mailboxStatusMessage = error.localizedDescription
+            }
+        }
+
         await syncService.bootstrap()
         await reloadProviderAvailability()
         await reloadAccounts()
@@ -300,32 +409,44 @@ final class AppState: ObservableObject {
     }
 
     // MARK: - Reply / Forward prefill
+    //
+    // Both reply and forward want the body — the user expects to see the
+    // quoted original in the new draft. We grab it from the cache (cheap
+    // when the message is the currently-open one, since selection already
+    // warms the cache). Cache miss → preview-only fallback so the reply
+    // still opens immediately.
 
     func reply(to message: MailMessage, all: Bool = false) {
-        let prefix = "Re: "
-        let subject = message.subject.hasPrefix(prefix) ? message.subject : prefix + message.subject
-        let recipient = message.senderName // mock — sender role not parsed as email
-        let body = "\n\n— \n在 \(message.timestampLabel) \(message.senderName) 写道：\n> \(message.bodyParagraphs.first ?? message.preview)"
-        let cc = all ? message.recipientLine : ""
-        openCompose(prefill: ComposeDraft(
-            to: recipient,
-            cc: cc,
-            subject: subject,
-            body: body,
-            fromAccountID: message.accountID ?? accounts.first?.id,
-            showCcBcc: all
-        ))
+        Task { @MainActor in
+            let body = await bodyStore.body(for: message.id)
+            let quoted = body?.paragraphs.first ?? message.preview
+            let prefix = "Re: "
+            let subject = message.subject.hasPrefix(prefix) ? message.subject : prefix + message.subject
+            let bodyText = "\n\n— \n在 \(message.timestampLabel) \(message.senderName) 写道：\n> \(quoted)"
+            openCompose(prefill: ComposeDraft(
+                to: message.senderName,
+                cc: all ? message.recipientLine : "",
+                subject: subject,
+                body: bodyText,
+                fromAccountID: message.accountID ?? accounts.first?.id,
+                showCcBcc: all
+            ))
+        }
     }
 
     func forward(message: MailMessage) {
-        let prefix = "Fwd: "
-        let subject = message.subject.hasPrefix(prefix) ? message.subject : prefix + message.subject
-        let body = "\n\n---------- 转发邮件 ----------\n发件人：\(message.senderName)\n时间：\(message.timestampLabel)\n主题：\(message.subject)\n\n\(message.bodyParagraphs.joined(separator: "\n\n"))"
-        openCompose(prefill: ComposeDraft(
-            subject: subject,
-            body: body,
-            fromAccountID: message.accountID ?? accounts.first?.id
-        ))
+        Task { @MainActor in
+            let body = await bodyStore.body(for: message.id)
+            let prefix = "Fwd: "
+            let subject = message.subject.hasPrefix(prefix) ? message.subject : prefix + message.subject
+            let quotedBody = body?.paragraphs.joined(separator: "\n\n") ?? message.preview
+            let bodyText = "\n\n---------- 转发邮件 ----------\n发件人：\(message.senderName)\n时间：\(message.timestampLabel)\n主题：\(message.subject)\n\n\(quotedBody)"
+            openCompose(prefill: ComposeDraft(
+                subject: subject,
+                body: bodyText,
+                fromAccountID: message.accountID ?? accounts.first?.id
+            ))
+        }
     }
 
     // MARK: - Compose tabs
@@ -413,8 +534,12 @@ final class AppState: ObservableObject {
         case .all:      return true
         case .unread:   return true // placeholder until unread is modelled
         case .priority: return message.isPriority
-        case .attach:   return message.preview.lowercased().contains("attach") || message.preview.contains("附件")
-        case .mentions: return message.bodyParagraphs.joined().contains("@")
+        case .attach:   return message.attachments.isEmpty == false
+                            || message.preview.lowercased().contains("attach")
+                            || message.preview.contains("附件")
+        // Body-text filtering moved out with the F7 split. Approximation
+        // via preview/subject; precise filter waits on FTS over body_text.
+        case .mentions: return message.preview.contains("@") || message.subject.contains("@")
         }
     }
 

@@ -4,7 +4,11 @@ protocol MailProvider: Sendable {
     var providerType: MailProviderType { get }
 
     func validateConnection(account: MailAccount, credentials: MailAccountCredentials) async throws
-    func fetchInbox(account: MailAccount, credentials: MailAccountCredentials, limit: Int) async throws -> [MailMessage]
+    /// Fetch the most recent `limit` messages. Returns paired (header, body)
+    /// so the sync engine can hand each plane to the right repository
+    /// method. Adapters never write the DB themselves — separation of
+    /// concerns: protocol parsing here, persistence upstream.
+    func fetchInbox(account: MailAccount, credentials: MailAccountCredentials, limit: Int) async throws -> [ParsedRawMessage]
     func send(message: OutgoingMailMessage, account: MailAccount, credentials: MailAccountCredentials) async throws
 }
 

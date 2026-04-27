@@ -18,9 +18,7 @@ struct MessageListView: View {
             list
         }
         .background(DS.Color.surface)
-        .overlay(alignment: .trailing) {
-            Rectangle().fill(DS.Color.line).frame(width: 1)
-        }
+        // Trailing hairline removed — VerticalResizer in RootView draws it.
     }
 
     /// Active scope chip — derived from sidebar account/label scope.
@@ -85,7 +83,8 @@ struct MessageListView: View {
                         MessageRow(
                             message: message,
                             isSelected: appState.selectedMessageID == message.id,
-                            accountColor: color(for: message)
+                            accountColor: color(for: message),
+                            density: appState.listDensity
                         )
                         .onTapGesture { appState.selectMessage(message) }
                     }
@@ -164,12 +163,42 @@ private struct ListHeader: View {
                 IconButton(icon: .refresh) {
                     Task { await appState.refreshMailbox() }
                 }
-                IconButton(icon: .more)
+                Menu {
+                    Section(header: Text(appState.language == .simplifiedChinese ? "列表密度" : "Density")) {
+                        ForEach(ListDensity.allCases) { density in
+                            Button {
+                                appState.listDensity = density
+                            } label: {
+                                if appState.listDensity == density {
+                                    Label(densityLabel(density), systemImage: "checkmark")
+                                } else {
+                                    Text(densityLabel(density))
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    DSIcon(name: .more, size: 13)
+                        .foregroundStyle(DS.Color.ink2)
+                        .frame(width: 24, height: 24)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
             }
         }
         .padding(.leading, 14)
         .padding(.trailing, 10)
         .frame(height: 38)
+    }
+
+    private func densityLabel(_ density: ListDensity) -> String {
+        let zh = appState.language == .simplifiedChinese
+        switch density {
+        case .compact:     return zh ? "紧凑" : "Compact"
+        case .cozy:        return zh ? "常规" : "Cozy"
+        case .comfortable: return zh ? "宽松" : "Comfortable"
+        }
     }
 }
 
@@ -221,6 +250,7 @@ struct MessageRow: View {
     let message: MailMessage
     let isSelected: Bool
     let accountColor: Color
+    let density: ListDensity
 
     @State private var isHovered = false
 
@@ -229,33 +259,85 @@ struct MessageRow: View {
     private var isUnread: Bool { message.isPriority }
 
     var body: some View {
-        HStack(spacing: 10) {
-            // Unread indicator column
-            ZStack {
-                if isUnread {
-                    Circle()
-                        .fill(DS.Color.accent)
-                        .frame(width: 7, height: 7)
-                        .overlay(Circle().stroke(DS.Color.accentGlow, lineWidth: 2).scaleEffect(2))
-                }
+        Group {
+            switch density {
+            case .compact:     compactBody
+            case .cozy:        cozyBody
+            case .comfortable: comfortableBody
             }
-            .frame(width: 8)
+        }
+        .frame(height: density.rowHeight)
+        .background(Rectangle().fill(background))
+        .overlay(alignment: .leading) {
+            if isSelected {
+                Rectangle()
+                    .fill(DS.Color.accent)
+                    .frame(width: 2)
+                    .clipShape(RoundedRectangle(cornerRadius: 1, style: .continuous))
+            }
+        }
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(DS.Color.line).frame(height: 1)
+        }
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+    }
 
+    // MARK: – Compact (single line)
+
+    private var compactBody: some View {
+        HStack(spacing: 8) {
+            unreadDot
+            Avatar(
+                initials: message.senderInitials,
+                size: 18,
+                tint: AvatarTint.neutral(for: message.senderName),
+                providerColor: accountColor
+            )
+            Text(message.senderName)
+                .font(DS.Font.sans(12, weight: isUnread ? .semibold : .medium))
+                .foregroundStyle(DS.Color.ink)
+                .lineLimit(1)
+                .frame(width: 110, alignment: .leading)
+            Text(message.subject)
+                .font(DS.Font.sans(12, weight: isUnread ? .semibold : .regular))
+                .foregroundStyle(DS.Color.ink2)
+                .lineLimit(1)
+                .layoutPriority(2)
+            Text(message.preview)
+                .font(DS.Font.sans(11.5))
+                .foregroundStyle(DS.Color.ink4)
+                .lineLimit(1)
+                .layoutPriority(1)
+            Spacer(minLength: 4)
+            if message.attachments.isEmpty == false {
+                DSIcon(name: .paperclip, size: 9)
+                    .foregroundStyle(DS.Color.ink4)
+            }
+            Text(message.timestampLabel)
+                .font(DS.Font.mono(10.5, weight: isUnread ? .semibold : .medium))
+                .foregroundStyle(isUnread ? DS.Color.ink2 : DS.Color.ink4)
+                .frame(width: 50, alignment: .trailing)
+        }
+        .padding(.horizontal, 10)
+    }
+
+    // MARK: – Cozy (default — two effective lines but flat)
+
+    private var cozyBody: some View {
+        HStack(spacing: 10) {
+            unreadDot
             Avatar(
                 initials: message.senderInitials,
                 size: 28,
                 tint: AvatarTint.neutral(for: message.senderName),
                 providerColor: accountColor
             )
-
-            // From
             Text(message.senderName)
                 .font(DS.Font.sans(12.5, weight: isUnread ? .bold : .medium))
                 .foregroundStyle(DS.Color.ink)
                 .lineLimit(1)
                 .frame(width: 112, alignment: .leading)
-
-            // Subject + preview
             HStack(spacing: 6) {
                 if isUnread {
                     DSIcon(name: .pin, size: 11)
@@ -272,13 +354,9 @@ struct MessageRow: View {
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            // Labels
             if message.tag.isEmpty == false {
                 LabelPill(text: localizedTag(message.tag))
             }
-
-            // Time
             Text(message.timestampLabel)
                 .font(DS.Font.mono(11, weight: isUnread ? .semibold : .medium))
                 .foregroundStyle(isUnread ? DS.Color.ink2 : DS.Color.ink4)
@@ -286,23 +364,71 @@ struct MessageRow: View {
         }
         .padding(.leading, 10)
         .padding(.trailing, 12)
-        .frame(height: 50)
-        .background(
-            Rectangle().fill(background)
-        )
-        .overlay(alignment: .leading) {
-            if isSelected {
-                Rectangle()
+    }
+
+    // MARK: – Comfortable (full vertical stack)
+
+    private var comfortableBody: some View {
+        HStack(alignment: .top, spacing: 10) {
+            unreadDot
+                .padding(.top, 14)
+            Avatar(
+                initials: message.senderInitials,
+                size: 34,
+                tint: AvatarTint.neutral(for: message.senderName),
+                providerColor: accountColor
+            )
+            .padding(.top, 8)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(message.senderName)
+                        .font(DS.Font.sans(13, weight: isUnread ? .bold : .semibold))
+                        .foregroundStyle(DS.Color.ink)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    if message.attachments.isEmpty == false {
+                        DSIcon(name: .paperclip, size: 10)
+                            .foregroundStyle(DS.Color.ink4)
+                    }
+                    Text(message.timestampLabel)
+                        .font(DS.Font.mono(11, weight: isUnread ? .semibold : .medium))
+                        .foregroundStyle(isUnread ? DS.Color.ink2 : DS.Color.ink4)
+                }
+                Text(message.subject)
+                    .font(DS.Font.sans(12.5, weight: isUnread ? .semibold : .medium))
+                    .foregroundStyle(DS.Color.ink)
+                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(message.preview)
+                        .font(DS.Font.sans(11.5))
+                        .foregroundStyle(DS.Color.ink3)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    if message.tag.isEmpty == false {
+                        LabelPill(text: localizedTag(message.tag))
+                    }
+                }
+            }
+            .padding(.top, 10)
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: – Helpers
+
+    private var unreadDot: some View {
+        ZStack {
+            if isUnread {
+                Circle()
                     .fill(DS.Color.accent)
-                    .frame(width: 2)
-                    .clipShape(RoundedRectangle(cornerRadius: 1, style: .continuous))
+                    .frame(width: 7, height: 7)
+                    .overlay(Circle().stroke(DS.Color.accentGlow, lineWidth: 2).scaleEffect(2))
             }
         }
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(DS.Color.line).frame(height: 1)
-        }
-        .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
+        .frame(width: 8)
     }
 
     private var background: Color {
@@ -312,7 +438,6 @@ struct MessageRow: View {
     }
 
     private func localizedTag(_ tag: String) -> String {
-        // Designs use short Chinese chip strings; fall back to raw tag otherwise.
         switch tag.uppercased() {
         case "DESIGN": return "团队"
         case "DEV":    return "工作"

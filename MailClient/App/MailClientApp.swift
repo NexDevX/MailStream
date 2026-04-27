@@ -13,7 +13,10 @@ struct MailClientApp: App {
         WindowGroup(appState.strings.appName) {
             RootView()
                 .environmentObject(appState)
-                .frame(minWidth: 1040, minHeight: 680)
+                // Floor low enough to fit a 13" laptop in split-screen
+                // (left half ≈ 720pt). RootView collapses the sidebar
+                // and switches to drilldown layout below 840pt.
+                .frame(minWidth: 720, minHeight: 560)
                 .task {
                     await appState.bootstrap()
                 }
@@ -36,6 +39,11 @@ struct MailClientApp: App {
                     appState.isShowingCommandPalette.toggle()
                 }
                 .keyboardShortcut("k", modifiers: .command)
+
+                Button(appState.language == .simplifiedChinese ? "切换侧栏" : "Toggle Sidebar") {
+                    appState.isSidebarVisible.toggle()
+                }
+                .keyboardShortcut("\\", modifiers: [.command, .control])
 
                 Divider()
 
