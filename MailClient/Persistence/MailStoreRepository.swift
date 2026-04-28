@@ -17,6 +17,7 @@ actor MailStoreRepository: MailRepository {
     private let messageDAO: MessageDAO
     private let accountDAO: AccountDAO
     private let folderDAO: FolderDAO
+    private let syncStateDAO: SyncStateDAO
 
     /// Snapshot of the last `loadMessages()` result. Invalidated on every
     /// write. The list view re-reads this often (chip toggles, scope
@@ -28,6 +29,7 @@ actor MailStoreRepository: MailRepository {
         self.messageDAO = MessageDAO(db: db)
         self.accountDAO = AccountDAO(db: db)
         self.folderDAO  = FolderDAO(db: db)
+        self.syncStateDAO = SyncStateDAO(db: db)
     }
 
     // MARK: - Header plane
@@ -123,6 +125,23 @@ actor MailStoreRepository: MailRepository {
         } catch {
             MailClientLogger.storage.error("listFolders failed: \(error.localizedDescription)")
             return []
+        }
+    }
+
+    func syncCursor(folderID: Int64) async -> SyncCursor {
+        do {
+            return try await syncStateDAO.cursor(folderID: folderID)
+        } catch {
+            MailClientLogger.storage.error("syncCursor(\(folderID)) failed: \(error.localizedDescription)")
+            return SyncCursor(lastUID: 0, uidValidity: nil, highestModseq: nil, lastFullSync: nil)
+        }
+    }
+
+    func recordSyncCursor(_ cursor: SyncCursor, folderID: Int64) async {
+        do {
+            try await syncStateDAO.record(folderID: folderID, cursor: cursor)
+        } catch {
+            MailClientLogger.storage.error("recordSyncCursor(\(folderID)) failed: \(error.localizedDescription)")
         }
     }
 

@@ -46,6 +46,19 @@ protocol MailRepository: Sendable {
     /// `[]` for in-memory test repositories.
     func listFolders(for accountID: UUID) async -> [MailFolder]
 
+    /// Read the persisted sync cursor for a folder. Returns a zeroed
+    /// cursor (`lastUID == 0`) when there's no row yet — that's the
+    /// adapter's signal to do a full top-of-mailbox window. The
+    /// adapter itself detects UIDVALIDITY drift against this cursor
+    /// and falls back to a full window when it changed.
+    func syncCursor(folderID: Int64) async -> SyncCursor
+
+    /// Persist the cursor returned by an adapter's `fetchHeaders`.
+    /// Called after a successful header batch lands so the next
+    /// refresh can ask for `lastUID+1:*` instead of refetching the
+    /// trailing window.
+    func recordSyncCursor(_ cursor: SyncCursor, folderID: Int64) async
+
     /// Drop any in-memory derivations the repository keeps (header
     /// snapshots, summary caches, …). Used by debug "wipe local cache"
     /// after the SQLite tables have been re-created — without it the
@@ -64,4 +77,12 @@ extension MailRepository {
     func upsertFolders(_ folders: [RemoteFolder], for account: MailAccount) async -> [MailFolder] { [] }
     func upsertRemoteHeaders(_ headers: [RemoteHeader], folder: MailFolder, account: MailAccount) async {}
     func listFolders(for accountID: UUID) async -> [MailFolder] { [] }
+
+    /// In-memory / preview repositories don't persist cursors. The
+    /// zeroed cursor + no-op write make every test refresh act like a
+    /// first sync, which is what tests want anyway.
+    func syncCursor(folderID: Int64) async -> SyncCursor {
+        SyncCursor(lastUID: 0, uidValidity: nil, highestModseq: nil, lastFullSync: nil)
+    }
+    func recordSyncCursor(_ cursor: SyncCursor, folderID: Int64) async {}
 }

@@ -245,4 +245,61 @@ struct PersistenceTests {
         let loadedAfterReplay = await messageRepo.loadMessages()
         #expect(loadedAfterReplay.count == 2)
     }
+
+    /// Phase 3 C1 — sync cursor round-trip. The repo persists what
+    /// the adapter returns from `fetchHeaders`, and the next refresh
+    /// reads it back so the IMAP client can do incremental
+    /// `lastUID+1:*` fetches instead of re-windowing every time.
+    /// UIDVALIDITY is part of the cursor and survives the round-trip
+    /// so the adapter can detect server-side renumbering on the
+    /// *next* refresh after one happened.
+    @Test
+    func syncCursorRoundTrip() async throws {
+        let db = try await makeDatabase()
+        let accountRepo = MailStoreAccountRepository(db: db)
+        let messageRepo = MailStoreRepository(db: db)
+
+        let account = MailAccount(providerType: .qq, displayName: "X", emailAddress: "x@y.com")
+        await accountRepo.upsertAccount(account)
+        let persisted = await messageRepo.upsertFolders(
+            [RemoteFolder(remoteID: "INBOX", name: "Inbox", role: .inbox)],
+            for: account
+        )
+        let inbox = persisted[0]
+
+        // Fresh folder: cursor reads back as zeroed (which is the
+        // adapter's signal to do a full top-of-mailbox window).
+        let initial = await messageRepo.syncCursor(folderID: inbox.id)
+        #expect(initial.lastUID == 0)
+        #expect(initial.uidValidity == nil)
+
+        // Adapter returns a cursor with real values. Persist it.
+        let advanced = SyncCursor(
+            lastUID: 4815,
+            uidValidity: 1_700_000_000,
+            highestModseq: nil,
+            lastFullSync: Date(timeIntervalSince1970: 1_700_000_500)
+        )
+        await messageRepo.recordSyncCursor(advanced, folderID: inbox.id)
+
+        // Next refresh sees the persisted cursor.
+        let reloaded = await messageRepo.syncCursor(folderID: inbox.id)
+        #expect(reloaded.lastUID == 4815)
+        #expect(reloaded.uidValidity == 1_700_000_000)
+
+        // UIDVALIDITY pivot survives a write — the adapter detects
+        // mismatch on the *current* fetch by comparing
+        // `cursor.uidValidity` (old) vs the SELECT response (new),
+        // then writes the new uidValidity back. This mirrors that.
+        let pivoted = SyncCursor(
+            lastUID: 50,
+            uidValidity: 1_700_000_999,    // server renumbered
+            highestModseq: nil,
+            lastFullSync: Date()
+        )
+        await messageRepo.recordSyncCursor(pivoted, folderID: inbox.id)
+        let afterPivot = await messageRepo.syncCursor(folderID: inbox.id)
+        #expect(afterPivot.uidValidity == 1_700_000_999)
+        #expect(afterPivot.lastUID == 50)
+    }
 }

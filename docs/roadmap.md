@@ -74,12 +74,12 @@ works end to end.
 
 ### Workstream C — Sync engine polish
 
-| Step | Detail |
-| ---- | ------ |
-| C1 | `SyncStateDAO` cursor advancement, UIDVALIDITY change detection (full re-sync trigger) |
-| C2 | Per-folder fetch prioritization (inbox first, archive last) |
-| C3 | Push: IMAP IDLE for accounts that support it; poll fallback otherwise |
-| C4 | Send-on-network-restore: queue outgoing messages when offline |
+| Step | State | Detail |
+| ---- | ----- | ------ |
+| C1 | ✅ 2026-04-28 | `MailRepository.syncCursor` / `recordSyncCursor` wrap `SyncStateDAO`. `MailSyncEngine.refreshAll` reads the cursor before each `fetchHeaders` and persists `result.newCursor` after, so subsequent refreshes do `lastUID+1:*` instead of re-windowing the same 50 headers. UIDVALIDITY drift is detected (logged warning) — orphan-row purge stays as a Phase 4 follow-up. 1 round-trip test. |
+| C2 | 🔵 | Per-folder fetch prioritization (inbox first, archive last) |
+| C3 | 🔵 | Push: IMAP IDLE for accounts that support it; poll fallback otherwise |
+| C4 | 🔵 | Send-on-network-restore: queue outgoing messages when offline |
 
 ## Phase 4 — Adaptivity & energy
 

@@ -129,13 +129,22 @@ actor MailSyncEngine {
                     throw MailServiceError.invalidServerResponse("Inbox folder not found")
                 }
 
-                // 3) Per-folder header fetch + upsert. Cursor starts
-                //    empty (full window of the most recent N) — C1
-                //    will wire the persisted `SyncCursor`. Each folder
-                //    is its own transaction inside the repository so
-                //    one failing folder doesn't roll back the others.
+                // 3) Per-folder header fetch + upsert. The cursor
+                //    comes from `sync_state` so the second refresh
+                //    only fetches `lastUID+1:*` instead of the full
+                //    trailing window. The adapter detects UIDVALIDITY
+                //    drift against the cursor we hand it and falls
+                //    back to a full window when the server has
+                //    renumbered (rare; happens on QQ when a folder is
+                //    renamed in the web UI). The new cursor returned
+                //    by the adapter is what we persist — that's where
+                //    the updated UIDVALIDITY lives.
+                //
+                //    Each folder is its own transaction inside the
+                //    repository so one failing folder doesn't roll
+                //    back the others.
                 for folder in foldersToFetch {
-                    let initialCursor = SyncCursor(lastUID: 0, uidValidity: nil, highestModseq: nil, lastFullSync: nil)
+                    let cursor = await repository.syncCursor(folderID: folder.id)
                     let remoteFolder = remoteFolders.first { $0.remoteID == folder.remoteID }
                         ?? RemoteFolder(remoteID: folder.remoteID, name: folder.name, role: folder.role)
                     let result: FetchHeadersResult
@@ -144,7 +153,7 @@ actor MailSyncEngine {
                             account: account,
                             credentials: credentials,
                             folder: remoteFolder,
-                            cursor: initialCursor,
+                            cursor: cursor,
                             limit: Self.headerWindowSize
                         )
                     } catch {
@@ -162,6 +171,19 @@ actor MailSyncEngine {
                         folder: folder,
                         account: account
                     )
+                    await repository.recordSyncCursor(result.newCursor, folderID: folder.id)
+                    if let stored = cursor.uidValidity,
+                       let fresh = result.newCursor.uidValidity,
+                       stored != fresh {
+                        // The server renumbered. The adapter already
+                        // pivoted to a full window for this batch;
+                        // log so we can correlate with any orphan
+                        // rows the user reports later. Phase 4 will
+                        // add a folder-scoped purge here.
+                        MailClientLogger.sync.warning(
+                            "UIDVALIDITY changed on \(folder.remoteID): \(stored) → \(fresh) — old rows in this folder are now orphans until a manual wipe."
+                        )
+                    }
                     totalFetched += result.headers.count
 
                     // 4) Body prefetch only for the freshest inbox

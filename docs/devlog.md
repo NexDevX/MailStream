@@ -190,6 +190,63 @@ the live smoke harness exercised real data:
 
 ---
 
+## 2026-04-28 (later) — Sync cursor + UIDVALIDITY round-trip (C1)
+
+### What landed
+- **`MailRepository.syncCursor(folderID:)` /
+  `recordSyncCursor(_:folderID:)`** — thin wrappers around the
+  existing `SyncStateDAO`. Default no-op implementations so the
+  in-memory test repo doesn't have to care; production
+  `MailStoreRepository` overrides both. The repo holds an
+  `actor`-scoped `SyncStateDAO` instance now, alongside the other
+  DAOs.
+  *Core/Services/MailRepository.swift, Persistence/MailStoreRepository.swift*
+- **`MailSyncEngine.refreshAll` is incremental.** Before each
+  per-folder `adapter.fetchHeaders`, the engine pulls the
+  persisted `SyncCursor` and hands it in. After a successful
+  upsert it writes `result.newCursor` back. The IMAP adapter (A2,
+  unchanged) was already cursor-aware: `cursor.lastUID > 0` →
+  `UID FETCH lastUID+1:*`. So the second refresh of an already-
+  synced folder now hits the wire as a tiny range fetch instead
+  of pulling the trailing 50.
+  *Core/Services/MailSyncEngine.swift*
+- **UIDVALIDITY drift telemetry.** When the new cursor's
+  `uidValidity` differs from what we had stored, the engine logs
+  a warning identifying which folder renumbered. The adapter has
+  already pivoted to a full-window fetch for *this* batch so the
+  user keeps seeing fresh data; orphan rows from the old
+  numbering linger until a manual wipe (Phase 4 will add a
+  folder-scoped purge).
+  *Core/Services/MailSyncEngine.swift*
+
+### Why
+Pre-C1, every refresh asked the server for the most recent N
+UIDs and relied on `(account, folder, remote_uid)` idempotency to
+dedupe. That worked but was wasteful (50 × header_size × folders
+of bandwidth, every refresh) and meant we couldn't notice a
+folder-renumber event — the adapter was checking
+`cursor.uidValidity`, but the engine never persisted the value
+the adapter returned, so on every cold launch the comparison was
+`nil != X` → "not changed". Now the cursor has a real lifetime,
+the comparison has both sides, and the rare UIDVALIDITY pivot
+shows up in the log instead of silently corrupting a future
+flag round-trip.
+
+### Tests
+- `xcodebuild build` — pass.
+- `xcodebuild test` — 44/44 pass (added `syncCursorRoundTrip`
+  covering zero-cursor on a fresh folder, lastUID + uidValidity
+  persistence across writes, and a UIDVALIDITY pivot).
+- Live smoke unchanged — `IMAPLiveSmokeTests` still green; this
+  workstream lives entirely above the IMAP adapter.
+
+### Next
+- Sidebar UI for real folder rows (still pending from A6).
+- C2 / C3: per-folder priority + IMAP IDLE push.
+- Settings → 通用 orphan toggles.
+
+---
+
 ## 2026-04-28 — Phase 3 wire-up (workstream A4/A5)
 
 ### What landed
