@@ -18,23 +18,63 @@ enum ThemeMode: String, Codable, Sendable {
 }
 
 /// In-flight theme switch. Lifetime: from the moment the user taps
-/// the toggle button until the reveal animation completes (~750 ms).
-/// Held by `ThemeController.transition`; consumed by
-/// `ThemeRevealOverlay` which drives the actual radius animation.
-struct ThemeTransition: Equatable, Identifiable {
+/// the toggle button until the reveal animation completes.
+///
+/// The visual model is a *true* circular reveal — the new theme is
+/// already live underneath, and we paint a frozen frame of the OLD
+/// theme on top of it, then progressively erase the snapshot from
+/// inside out at the click point. So inside the growing hole the
+/// user sees the new theme's actual content; outside the hole, a
+/// pixel-perfect freeze of where they were a moment ago.
+struct ThemeTransition: Identifiable {
     /// Stable id so `View.task(id:)` re-runs the animation pipeline
     /// for every fresh toggle, even if the user clicks twice in a row
     /// while a previous transition is still finishing.
     let id: UUID
     let target: ThemeMode
     /// Where the toggle button is, in the root coordinate space the
-    /// overlay also reads from. The expanding circle is centered
-    /// here — that's the "sun rising at this point" semantic.
+    /// overlay also reads from. The expanding hole is centered here.
     let origin: CGPoint
     /// Radius at full expansion. Caller computes
-    /// `distance-to-farthest-corner + small padding` so the disc
+    /// `distance-to-farthest-corner + small padding` so the hole
     /// always covers the entire window when expansion finishes.
     let finalRadius: CGFloat
+    /// Frozen pixels of the window contents at the moment the user
+    /// tapped, captured in the OLD theme. Rendered above the live
+    /// view and masked with a growing hole; once the hole covers
+    /// everything the snapshot is fully erased and we drop the
+    /// transition. Equatable identity falls back to `id` only.
+    let snapshot: NSImage
+}
+
+extension ThemeTransition: Equatable {
+    static func == (lhs: ThemeTransition, rhs: ThemeTransition) -> Bool {
+        // Two transitions are "the same" iff they were created by
+        // the same toggle. NSImage's bitwise equality is both
+        // expensive and meaningless here.
+        lhs.id == rhs.id
+    }
+}
+
+extension NSView {
+    /// Capture a deterministic, retina-correct snapshot of the
+    /// view's current rendering. Uses `cacheDisplay` so we don't
+    /// trip the screen-recording permission gate that
+    /// `CGWindowListCreateImage` would. Returns nil only when AppKit
+    /// fails to allocate the bitmap (effectively never on a healthy
+    /// system). Called on the main thread immediately before the
+    /// theme flip so the captured pixels are guaranteed to be the
+    /// OLD theme's render.
+    func mailStream_snapshotImage() -> NSImage? {
+        guard bounds.width > 0, bounds.height > 0,
+              let rep = bitmapImageRepForCachingDisplay(in: bounds) else {
+            return nil
+        }
+        cacheDisplay(in: bounds, to: rep)
+        let image = NSImage(size: bounds.size)
+        image.addRepresentation(rep)
+        return image
+    }
 }
 
 @MainActor
@@ -66,16 +106,19 @@ final class ThemeController: ObservableObject {
 
     /// Begin a circular-reveal toggle to the opposite mode.
     /// `origin` and `windowSize` are in the same coordinate space
-    /// (the named root coordinate space `RootView` establishes).
-    /// The animation actor (`ThemeRevealOverlay`) calls `commit()`
-    /// at the moment the disc fully covers the screen; the swap of
-    /// `mode` happens behind the disc so there's no visible jump.
-    func toggle(origin: CGPoint, windowSize: CGSize) {
-        // Cover the farthest corner — that's how far the disc must
-        // grow to fully eclipse the window. Padding handles the case
-        // where the user clicks near the dead-center and we'd
-        // otherwise stop a fraction short due to floating-point
-        // rounding.
+    /// (the named root coordinate space `RootView` establishes);
+    /// `snapshot` is a freeze frame of the window in the OLD theme,
+    /// captured by the caller right before this method is invoked.
+    ///
+    /// The mode is flipped *immediately* — the live view tree under
+    /// the snapshot starts repainting in the new theme right away.
+    /// The user doesn't see the flip because the snapshot covers
+    /// everything; as the overlay's hole grows, more of the new live
+    /// view is revealed.
+    func toggle(origin: CGPoint, windowSize: CGSize, snapshot: NSImage) {
+        // Cover the farthest corner — that's how far the hole must
+        // grow to fully erase the snapshot. Padding handles
+        // floating-point rounding at the corners.
         let dx = max(origin.x, windowSize.width  - origin.x)
         let dy = max(origin.y, windowSize.height - origin.y)
         let radius = sqrt(dx * dx + dy * dy) + 40
@@ -85,25 +128,20 @@ final class ThemeController: ObservableObject {
             id: UUID(),
             target: next,
             origin: origin,
-            finalRadius: radius
+            finalRadius: radius,
+            snapshot: snapshot
         )
+        // Flip live theme NOW. Tied to the same publish cycle as
+        // the transition assignment so SwiftUI sees both in one
+        // render pass — the snapshot appears at the same instant
+        // the underlying tree starts repainting in the new theme.
+        mode = next
+        defaults.set(next.rawValue, forKey: Self.storageKey)
     }
 
-    /// Atomic swap: flip the published `mode`, persist, leave the
-    /// transition in place so the overlay can fade out the disc on
-    /// its own schedule. The fade is purely cosmetic — by this
-    /// point the underlying scene has already re-rendered in the
-    /// new theme behind the (still opaque) disc.
-    func commitPendingTheme() {
-        guard let t = transition else { return }
-        mode = t.target
-        defaults.set(mode.rawValue, forKey: Self.storageKey)
-    }
-
-    /// Tear down the transition once the fade-out is complete.
-    /// Separate from `commitPendingTheme` because the disc has to
-    /// keep rendering between commit and removal — a `transition =
-    /// nil` here would yank the disc off-screen mid-fade.
+    /// Tear down the transition once the hole has consumed the
+    /// entire snapshot. The overlay calls this from its `task`
+    /// modifier when the radius animation completes.
     func clearTransition() {
         transition = nil
     }

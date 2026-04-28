@@ -31,7 +31,6 @@ struct RootView: View {
             if let transition = theme.transition {
                 ThemeRevealOverlay(
                     transition: transition,
-                    onCommit: { theme.commitPendingTheme() },
                     onComplete: { theme.clearTransition() }
                 )
                 .transition(.identity)

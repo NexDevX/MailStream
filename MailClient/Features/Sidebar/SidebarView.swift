@@ -240,14 +240,24 @@ struct SidebarView: View {
     private var themeToggleButton: some View {
         let goingDark = theme.mode == .light
         return Button {
-            // Window size from AppKit — the SwiftUI side has no
-            // single source of truth that's accurate during a
-            // potentially in-flight transition. `keyWindow` is the
-            // user-active window; falls back to the first visible
-            // one for the (rare) menu-bar-focus case.
+            // Capture an OLD-theme freeze frame BEFORE the controller
+            // flips `mode`. Order is critical — the overlay relies on
+            // these pixels being from the theme we're leaving. Using
+            // `contentView` (not the window itself) so the snapshot
+            // origin matches the SwiftUI named root coordinate space
+            // exactly, no titlebar offset to compensate for.
             let win = NSApp.keyWindow ?? NSApp.windows.first
-            let size = win?.contentLayoutRect.size ?? CGSize(width: 1280, height: 800)
-            theme.toggle(origin: themeButtonCenter, windowSize: size)
+            guard let content = win?.contentView,
+                  let snapshot = content.mailStream_snapshotImage() else {
+                // No window / capture failed — fall back to a flat
+                // mode swap with no animation. Better than nothing.
+                return
+            }
+            theme.toggle(
+                origin: themeButtonCenter,
+                windowSize: content.bounds.size,
+                snapshot: snapshot
+            )
         } label: {
             DSIcon(name: goingDark ? .moon : .sun, size: 13)
                 .foregroundStyle(DS.Color.ink3)

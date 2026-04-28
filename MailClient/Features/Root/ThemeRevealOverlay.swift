@@ -1,112 +1,82 @@
 import SwiftUI
 
-/// Full-screen overlay that animates a circular reveal of the new
-/// theme, like sunlight spreading from the spot the user tapped.
+/// Full-screen overlay that performs a *true* circular reveal of
+/// the new theme.
 ///
-/// Sequencing (see also `ThemeController`):
+/// **Visual model.** When the user taps the toggle, three things
+/// happen in the same render pass (see `ThemeController.toggle`):
+///   1. The window is captured as `transition.snapshot` (frozen
+///      frame of the OLD theme).
+///   2. `mode` flips, so the live RootView immediately starts
+///      repainting in the NEW theme.
+///   3. This overlay mounts on top, rendering the snapshot at full
+///      window size with a circular hole at `transition.origin`,
+///      radius 0.
 ///
-///   1. **Expand** (~520 ms) — radius animates 0 → `finalRadius`,
-///      disc fully opaque, target-theme background gradient. The
-///      user sees a colored wave wash from the toggle outward.
-///   2. **Commit** — at the moment the disc fully covers the
-///      window, `controller.commitPendingTheme()` flips the actual
-///      `colorScheme` published value. The view tree underneath
-///      re-renders in the new theme but is invisible because the
-///      disc still covers everything.
-///   3. **Fade** (~200 ms) — disc opacity 1 → 0. Underneath now
-///      matches the disc's color, so the fade is imperceptible —
-///      the perceived effect is just "the wave settled".
-///   4. **Clear** — `controller.clearTransition()` removes the
-///      overlay entirely so `task(id:)` is ready for the next
-///      toggle.
+/// As the hole grows, the OLD-theme pixels are erased from inside
+/// out and the NEW-theme live view shows through the cut. When the
+/// hole covers the window, the snapshot is fully erased and we call
+/// `onComplete` to drop the overlay.
 ///
-/// The overlay is `allowsHitTesting(false)` throughout so the
-/// underlying UI stays interactive. We can't gate the toggle
-/// button against re-fires during the animation easily without
-/// complicating the controller, so the user *can* re-toggle mid-
-/// animation — that just kicks off a fresh transition with a new
-/// `id`, which preempts the in-flight one cleanly.
+/// The overlay is `allowsHitTesting(false)` so the underlying UI is
+/// interactive throughout. Re-toggling mid-animation kicks off a
+/// fresh transition with a new `id`; `task(id:)` preempts cleanly.
 struct ThemeRevealOverlay: View {
     let transition: ThemeTransition
-    let onCommit: () -> Void
     let onComplete: () -> Void
 
     @State private var radius: CGFloat = 0
-    @State private var opacity: Double = 1
 
     var body: some View {
-        // The disc lives in the same coordinate space as the
-        // `origin` the controller stored. We position by the disc's
-        // center so SwiftUI doesn't have to do any extra translation.
-        Circle()
-            .fill(discFill)
-            .frame(width: max(radius, 0) * 2, height: max(radius, 0) * 2)
-            .position(transition.origin)
-            .opacity(opacity)
-            .blur(radius: 0.5) // sub-pixel blur masks any aliasing on the leading edge
-            .compositingGroup()
+        Image(nsImage: transition.snapshot)
+            .resizable()
+            // The snapshot's point size matches the window content
+            // view at capture time, which IS the full named root
+            // coordinate space. `.scaledToFill` + `.ignoresSafeArea`
+            // pin it edge-to-edge regardless of the user resizing
+            // the window mid-animation (the resize would warp the
+            // snapshot, but resizing during a 600 ms animation is
+            // an extreme edge case).
+            .scaledToFill()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .mask(holeMask)
             .ignoresSafeArea()
             .allowsHitTesting(false)
             .task(id: transition.id) {
+                // Pin to 0 first in case the previous transition
+                // left animatable state behind. SwiftUI snaps any
+                // outside-of-withAnimation assignment instantly.
                 radius = 0
-                opacity = 1
-
-                // Phase 1 — expand. easeOut so the wave decelerates
-                // as it reaches the corners; matches a real light-
-                // spreading-on-a-surface feel better than easeInOut.
-                withAnimation(.timingCurve(0.22, 0.61, 0.36, 1, duration: 0.52)) {
+                withAnimation(.timingCurve(0.22, 0.61, 0.36, 1, duration: 0.62)) {
                     radius = transition.finalRadius
                 }
-
-                // Wait for expand to finish, then flip theme behind
-                // the now-opaque cover.
-                try? await Task.sleep(nanoseconds: 540_000_000)
-                onCommit()
-
-                // Phase 2 — fade. Underneath now matches the disc
-                // color so this is invisible to the user; we still
-                // animate it to avoid an instant pop in case the
-                // gradient and the new theme background don't line
-                // up exactly (they nearly do, but warm-white vs
-                // pure-white is a perceptible mismatch).
-                withAnimation(.easeOut(duration: 0.22)) {
-                    opacity = 0
-                }
-
-                try? await Task.sleep(nanoseconds: 240_000_000)
+                try? await Task.sleep(nanoseconds: 660_000_000)
                 onComplete()
             }
     }
 
-    /// Sun-like radial gradient resolved in the **target** theme's
-    /// palette. Going-light uses warm white core + cream edge;
-    /// going-dark uses deep slate core + cool blue edge. The center
-    /// matches the new theme's `surface` token, so the fade-out at
-    /// the end has nothing to fade *to* visually.
-    private var discFill: RadialGradient {
-        switch transition.target {
-        case .light:
-            return RadialGradient(
-                colors: [
-                    Color(red: 1.00, green: 0.99, blue: 0.96),  // warm white core
-                    Color(red: 1.00, green: 0.96, blue: 0.88),  // cream halo
-                    Color(red: 0.97, green: 0.95, blue: 0.92)   // settles to surface
-                ],
-                center: .center,
-                startRadius: 0,
-                endRadius: max(radius, 1)
+    /// Mask: opaque rectangle with a punched-out circle at `origin`.
+    /// `.mask(_:)` keeps content where the mask is opaque, so this
+    /// keeps the snapshot visible everywhere EXCEPT the circle —
+    /// inside the circle the snapshot is transparent and the live
+    /// new-theme view underneath shows through.
+    ///
+    /// `.compositingGroup` is mandatory: without it the
+    /// `destinationOut` blend mode bleeds across the wider render
+    /// tree and the hole never appears. The group flattens the
+    /// rectangle + circle into a self-contained layer first.
+    private var holeMask: some View {
+        Rectangle()
+            .fill(Color.white)
+            .overlay(
+                Circle()
+                    .frame(width: max(radius, 0) * 2,
+                           height: max(radius, 0) * 2)
+                    .position(transition.origin)
+                    .blendMode(.destinationOut)
             )
-        case .dark:
-            return RadialGradient(
-                colors: [
-                    Color(red: 0.06, green: 0.07, blue: 0.10),  // deep slate core
-                    Color(red: 0.04, green: 0.05, blue: 0.08),  // midnight halo
-                    Color(red: 0.02, green: 0.03, blue: 0.05)   // settles to surface
-                ],
-                center: .center,
-                startRadius: 0,
-                endRadius: max(radius, 1)
-            )
-        }
+            .compositingGroup()
+            .ignoresSafeArea()
     }
 }
