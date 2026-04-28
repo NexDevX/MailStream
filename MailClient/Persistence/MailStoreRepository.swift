@@ -82,6 +82,107 @@ actor MailStoreRepository: MailRepository {
         headerSnapshot = nil
     }
 
+    // MARK: - Folder plane (Phase 3 A6)
+
+    func upsertFolders(_ folders: [RemoteFolder], for account: MailAccount) async -> [MailFolder] {
+        // Folder write is small (handful of rows per account) so we
+        // skip the explicit BEGIN/COMMIT — each upsert is its own
+        // SQLite transaction and the cost is dominated by the LIST
+        // round-trip that produced this list.
+        var written: [MailFolder] = []
+        for remote in folders {
+            do {
+                let id = try await folderDAO.upsert(
+                    accountID: account.id,
+                    remoteID: remote.remoteID,
+                    name: remote.name,
+                    role: remote.role,
+                    attributes: remote.attributes
+                )
+                written.append(MailFolder(
+                    id: id,
+                    accountID: account.id,
+                    remoteID: remote.remoteID,
+                    name: remote.name,
+                    role: remote.role,
+                    unreadCount: 0,
+                    totalCount: 0
+                ))
+            } catch {
+                MailClientLogger.storage.error(
+                    "upsertFolders(\(remote.remoteID)) failed: \(error.localizedDescription)"
+                )
+            }
+        }
+        return written
+    }
+
+    func listFolders(for accountID: UUID) async -> [MailFolder] {
+        do {
+            return try await folderDAO.all(accountID: accountID)
+        } catch {
+            MailClientLogger.storage.error("listFolders failed: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    /// Phase 3 A6 — the IMAP sync engine’s primary write path.
+    /// Writes a batch of provider-shaped headers into SQLite under
+    /// **one** transaction so a kill mid-sync can’t leave half a
+    /// folder visible. Drops the header snapshot afterwards so the UI
+    /// re-queries on the next read.
+    ///
+    /// Idempotency comes from `MessageDAO.upsertHeader`'s
+    /// `(account_id, folder_id, remote_uid)` unique key — re-syncing
+    /// the same UIDs updates flags / preview in place rather than
+    /// inserting duplicates.
+    func upsertRemoteHeaders(_ headers: [RemoteHeader], folder: MailFolder, account: MailAccount) async {
+        guard headers.isEmpty == false else { return }
+        headerSnapshot = nil
+
+        do {
+            try await db.sqlite.exec("BEGIN IMMEDIATE")
+            for remote in headers {
+                let id = MailSyncEngine.synthesizeMessageID(for: remote, accountID: account.id)
+                let upsert = HeaderUpsert(
+                    id: id,
+                    accountID: account.id,
+                    folderID: folder.id,
+                    remoteUID: remote.remoteUID,
+                    messageID: remote.messageID,
+                    threadID: remote.threadID,
+                    inReplyTo: remote.inReplyTo,
+                    subject: remote.subject,
+                    fromName: remote.fromName,
+                    fromAddress: remote.fromAddress,
+                    toAddresses: remote.toAddresses,
+                    ccAddresses: remote.ccAddresses,
+                    bccAddresses: [],
+                    replyTo: nil,
+                    preview: remote.preview,
+                    sentAt: remote.sentAt,
+                    receivedAt: remote.receivedAt,
+                    sizeBytes: remote.sizeBytes,
+                    flagsSeen: remote.flagsSeen,
+                    flagsFlagged: remote.flagsFlagged,
+                    flagsAnswered: remote.flagsAnswered,
+                    flagsDraft: folder.role == .drafts,
+                    hasAttachment: remote.hasAttachment,
+                    labelKeys: remote.labelKeys.isEmpty
+                        ? [account.providerType.shortTag]
+                        : remote.labelKeys
+                )
+                try await messageDAO.upsertHeader(upsert)
+            }
+            try await db.sqlite.exec("COMMIT")
+        } catch {
+            _ = try? await db.sqlite.exec("ROLLBACK")
+            MailClientLogger.storage.error(
+                "upsertRemoteHeaders(\(folder.remoteID), \(headers.count) rows) failed: \(error.localizedDescription)"
+            )
+        }
+    }
+
     func appendMessage(_ message: MailMessage) async {
         headerSnapshot = nil
         guard let accountID = message.accountID else { return }
@@ -124,12 +225,23 @@ actor MailStoreRepository: MailRepository {
             case .trash:              return .trash
             }
         }()
-        let folderID = try await folderDAO.upsert(
-            accountID: accountID,
-            remoteID: role.rawValue,                    // synthetic — IMAP would replace this
-            name: role.rawValue.capitalized,
-            role: role
-        )
+
+        // Prefer an existing IMAP-listed folder of this role over
+        // synthesizing a parallel one. This keeps the local Sent
+        // mirror (`MailSyncEngine.send`) writing into the same row
+        // the server's Sent fetch landed in, instead of producing two
+        // Sent folders with `remote_id` "sent" + "Sent Messages".
+        let folderID: Int64
+        if let existing = try await folderDAO.find(accountID: accountID, role: role) {
+            folderID = existing.id
+        } else {
+            folderID = try await folderDAO.upsert(
+                accountID: accountID,
+                remoteID: role.rawValue,                // synthetic fallback
+                name: role.rawValue.capitalized,
+                role: role
+            )
+        }
 
         let receivedAt = Self.parseDate(message.relativeTimestamp) ?? Date()
         let remoteUID = Int64(abs(message.id.hashValue) & 0x7fffffffffffffff)
@@ -159,13 +271,11 @@ actor MailStoreRepository: MailRepository {
 
     /// Reconstruct a `MailMessage` (header) from a DAO summary + its account.
     private static func compose(summary: MailMessageSummary, account: MailAccount) -> MailMessage {
-        let timestamp = MailTimestampFormatter.displayValues(
-            from: ISO8601DateFormatter().string(from: summary.receivedAt)
-        )
+        let timestamp = MailTimestampFormatter.displayValues(date: summary.receivedAt)
         return MailMessage(
             id: summary.id,
             accountID: summary.accountID,
-            sidebarItem: .allMail,
+            sidebarItem: Self.sidebarItem(for: summary.folderRole),
             inboxFilter: .inbox,
             senderName: summary.fromName,
             senderRole: summary.fromAddress,
@@ -181,6 +291,24 @@ actor MailStoreRepository: MailRepository {
     }
 
     // MARK: - Helpers
+
+    /// Map the persisted folder role onto the user-facing
+    /// `SidebarItem` enum the navigation chrome speaks. The enum is
+    /// narrower than the role taxonomy — `archive` / `junk` /
+    /// `important` / `starred` / `other` all collapse to `allMail`
+    /// because the sidebar doesn't surface them yet (Workstream A6 +
+    /// later). `priority` is *not* in this map: it's a virtual scope
+    /// filtered from `allMail` by `isFlagged`, not a folder a row
+    /// can live in.
+    private static func sidebarItem(for role: MailFolderRole) -> SidebarItem {
+        switch role {
+        case .sent:           return .sent
+        case .drafts:         return .drafts
+        case .trash, .junk:   return .trash
+        case .inbox, .archive, .important, .starred, .other:
+            return .allMail
+        }
+    }
 
     private static func parseRecipients(_ recipientLine: String) -> [String] {
         let trimmed = recipientLine

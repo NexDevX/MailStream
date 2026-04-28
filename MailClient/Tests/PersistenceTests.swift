@@ -167,4 +167,82 @@ struct PersistenceTests {
         let body = await messageRepo.loadBody(messageID: message.id)
         #expect(body?.paragraphs == ["First", "Second"])
     }
+
+    /// Phase 3 A6 — the IMAP sync engine writes through the new
+    /// `upsertRemoteHeaders` / `upsertFolders` path. This locks down
+    /// the contract: real IMAP UIDs land on disk, the message gets
+    /// composed back into the right `SidebarItem` based on its
+    /// folder's role, and re-running the same upsert is idempotent.
+    @Test
+    func remoteHeaderUpsertPathRoundTrips() async throws {
+        let db = try await makeDatabase()
+        let accountRepo = MailStoreAccountRepository(db: db)
+        let messageRepo = MailStoreRepository(db: db)
+
+        let account = MailAccount(providerType: .qq, displayName: "Work", emailAddress: "u@example.com")
+        await accountRepo.upsertAccount(account)
+
+        // 1) Persist server folder list — Inbox + Sent. The wire-form
+        //    Sent name simulates QQ's MUTF-7 encoding so we also cover
+        //    the "remoteID stays in wire format" invariant.
+        let remoteFolders = [
+            RemoteFolder(remoteID: "INBOX",  name: "Inbox", role: .inbox),
+            RemoteFolder(remoteID: "Sent Messages", name: "Sent", role: .sent)
+        ]
+        let persisted = await messageRepo.upsertFolders(remoteFolders, for: account)
+        #expect(persisted.count == 2)
+        #expect(persisted.contains { $0.role == .inbox })
+        #expect(persisted.contains { $0.role == .sent })
+
+        let inbox = persisted.first { $0.role == .inbox }!
+        let sent  = persisted.first { $0.role == .sent }!
+
+        // 2) Upsert two headers across two folders.
+        let inboxHeader = RemoteHeader(
+            remoteUID: 4711,
+            messageID: "<m1@example.com>",
+            subject: "Welcome",
+            fromAddress: "alice@example.com",
+            preview: "Hi there",
+            sentAt: Date(timeIntervalSince1970: 1_700_000_000),
+            receivedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            flagsFlagged: true
+        )
+        let sentHeader = RemoteHeader(
+            remoteUID: 1,
+            messageID: "<m2@example.com>",
+            subject: "Reply to a@b",
+            fromAddress: "u@example.com",
+            preview: "Thanks",
+            sentAt: Date(timeIntervalSince1970: 1_700_000_500),
+            receivedAt: Date(timeIntervalSince1970: 1_700_000_500)
+        )
+        await messageRepo.upsertRemoteHeaders([inboxHeader], folder: inbox, account: account)
+        await messageRepo.upsertRemoteHeaders([sentHeader],  folder: sent,  account: account)
+
+        // 3) Read back via the protocol — list view contract.
+        let loaded = await messageRepo.loadMessages()
+        #expect(loaded.count == 2)
+        let loadedInbox = loaded.first { $0.subject == "Welcome" }
+        let loadedSent  = loaded.first { $0.subject == "Reply to a@b" }
+        #expect(loadedInbox?.sidebarItem == .allMail,
+                "Inbox role should map to .allMail SidebarItem")
+        #expect(loadedInbox?.isPriority == true,
+                "isFlagged should round-trip into MailMessage.isPriority")
+        #expect(loadedSent?.sidebarItem == .sent,
+                "Sent role should map to .sent SidebarItem")
+
+        // 4) listFolders surfaces both rows for the sidebar.
+        let folders = await messageRepo.listFolders(for: account.id)
+        #expect(folders.count == 2)
+        #expect(folders.contains { $0.remoteID == "Sent Messages" })
+
+        // 5) Idempotency — re-upserting the same header doesn't
+        //    duplicate. SQLite's (account, folder, remote_uid) unique
+        //    index does the work; this guards against a regression
+        //    where someone adds a column to the conflict clause.
+        await messageRepo.upsertRemoteHeaders([inboxHeader], folder: inbox, account: account)
+        let loadedAfterReplay = await messageRepo.loadMessages()
+        #expect(loadedAfterReplay.count == 2)
+    }
 }

@@ -98,13 +98,24 @@ Per-provider implementations of `MailProviderAdapter`:
   exercises validate → list → fetchHeaders → fetchBody end-to-end
   against a real account. Disabled by default so CI / fresh
   checkouts don't hit the network.
-- 🔜 Real folder list (workstream A6) — sidebar reads from the
-  `folders` table populated by `listFolders()` instead of the static
-  `MailSidebarItem` enum. Also: bypass `MailMessage` in the upsert
-  path so the DB carries true IMAP `remoteUID` / `messageID` /
-  `threadID` (today they're synthesized via
-  `MailMessage.id.hashValue`, which is functionally OK for one
-  account but wasteful and lossy on resync).
+- ✅ Folder + RemoteHeader persistence (workstream A6, 2026-04-28) —
+  `MailRepository` gains `upsertFolders(_:for:)`,
+  `upsertRemoteHeaders(_:folder:account:)`, and
+  `listFolders(for:)`. `MailSyncEngine.refreshAll` lists folders,
+  persists every one (so QQ's `其他文件夹` and friends are on disk
+  even if the sidebar can't render them yet), and fetches headers
+  for the four `SidebarItem`-navigable roles
+  (`inbox` / `sent` / `drafts` / `trash`). The new write path goes
+  straight from `RemoteHeader` → `HeaderUpsert`, carrying real IMAP
+  UID / Message-ID / folder PK without lossy round-trip through
+  `MailMessage`. Read path JOINs `folders.role` into the message
+  summary so `compose` can map back to the right `SidebarItem`.
+  Re-syncing the same UIDs is idempotent via the existing
+  `(account, folder, remote_uid)` unique index. 1 round-trip test.
+- 🔜 Sidebar UI showing **real** folder rows from the `folders`
+  table (Chinese / custom folders today collapse into the static
+  enum). Persistence is ready; this is purely a navigation-chrome
+  change.
 - 🔜 `GmailAdapter` — OAuth2 (workstream B) + Gmail REST API.
 - 🔜 `OutlookAdapter` — MSAL + Microsoft Graph (workstream B).
 - 🔜 `ICloudAdapter` — IMAP with app-specific password.

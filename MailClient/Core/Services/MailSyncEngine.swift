@@ -16,16 +16,15 @@ import Foundation
 /// The "engine" label matches `roadmap.md`'s vocabulary so newcomers
 /// know which protocol it speaks.
 ///
-/// **What still ships from Phase 2 land:** persistence still goes
-/// through `MailRepository.saveMessages([MailMessage])`. Real
-/// `remoteUID` / `messageID` round-tripping needs a parallel header
-/// path on the repository (Phase 3.A6) that doesn't lossy-convert
-/// through `MailMessage`. Until then the UI sees IMAP data and
-/// **resyncs are correct** — duplicates collapse on the synthesized
-/// folder/UID combo because `MessageDAO.upsertHeader` is idempotent
-/// on `(account, folder, remote_uid)` — but cursors aren't yet
-/// persisted. The cost is one extra `UID FETCH` window per launch,
-/// which we accept until A6 lands.
+/// **Persistence shape (Phase 3.A6, 2026-04-28):** writes go through
+/// `MailRepository.upsertRemoteHeaders(folder:account:)` — the
+/// provider-shape header lands on disk verbatim, real IMAP UID +
+/// folder PK + Message-ID. The legacy `saveMessages([MailMessage])`
+/// path is still wired for seed data and the local Sent mirror in
+/// `send()`. Cursor advancement (workstream C1) is not done here yet:
+/// every refresh asks for a full window of the most recent N headers
+/// and relies on idempotent `(account, folder, remote_uid)` upsert
+/// to dedupe.
 actor MailSyncEngine {
     /// Hard cap on the headers a single `fetchHeaders` call returns.
     /// Server-side IMAP windows can be much larger, but our UI table
@@ -77,8 +76,15 @@ actor MailSyncEngine {
 
     // MARK: - Refresh
 
-    /// Pull the Inbox of every enabled account through its adapter.
-    /// Returns the total header count delivered to the repository.
+    /// Pull every navigable folder of every enabled account through
+    /// its adapter. "Navigable" today means the four roles the
+    /// `SidebarItem` enum can address — `inbox`, `sent`, `drafts`,
+    /// `trash`. Other server folders (junk, archive, custom) are
+    /// listed and persisted but not header-fetched until the sidebar
+    /// grows real folder rows.
+    ///
+    /// Returns the total header count delivered to the repository
+    /// across all folders / accounts.
     @discardableResult
     func refreshAll() async throws -> Int {
         let accounts = await accountService.loadAccounts().filter(\.isEnabled)
@@ -86,7 +92,7 @@ actor MailSyncEngine {
             throw MailServiceError.accountNotConfigured
         }
 
-        var fetchedHeaders: [MailMessage] = []
+        var totalFetched = 0
         var bodyJobs: [BodyJob] = []
         var firstError: Error?
 
@@ -95,69 +101,101 @@ actor MailSyncEngine {
                 let credentials = try await accountService.credentials(for: account)
                 let adapter = try await accountService.adapter(for: account)
 
-                // 1) Folder enumeration — find the Inbox. Until Phase
-                //    3.A6 we only sync that one folder; multi-folder
-                //    sync is a fan-out at this exact point.
-                let folders = try await adapter.listFolders(account: account, credentials: credentials)
-                guard let inbox = folders.first(where: { $0.role == .inbox })
-                    ?? folders.first(where: { $0.remoteID.uppercased() == "INBOX" }) else {
+                // 1) Folder enumeration → persist the whole list so the
+                //    sidebar (when it grows real folder rows) and any
+                //    later cross-folder queries see the same shape the
+                //    server reports. Returns persisted MailFolder rows
+                //    keyed by SQLite rowid — we'll need those PKs to
+                //    write headers in step 3.
+                let remoteFolders = try await adapter.listFolders(
+                    account: account,
+                    credentials: credentials
+                )
+                let persistedFolders = await repository.upsertFolders(
+                    remoteFolders,
+                    for: account
+                )
+
+                // 2) Pick which folders to fetch headers from. Today the
+                //    UI only navigates four roles; junk/archive/custom
+                //    folders are persisted but skipped to keep
+                //    refresh bandwidth bounded. When the sidebar
+                //    surfaces them, drop the filter.
+                let navigableRoles: Set<MailFolderRole> = [.inbox, .sent, .drafts, .trash]
+                let foldersToFetch = persistedFolders.filter {
+                    navigableRoles.contains($0.role)
+                }
+                guard foldersToFetch.contains(where: { $0.role == .inbox }) else {
                     throw MailServiceError.invalidServerResponse("Inbox folder not found")
                 }
 
-                // 2) Header fetch. Cursor starts empty (full window of
-                //    the most recent N) — A6 wires the persisted
-                //    `SyncCursor`.
-                let initialCursor = SyncCursor(lastUID: 0, uidValidity: nil, highestModseq: nil, lastFullSync: nil)
-                let result = try await adapter.fetchHeaders(
-                    account: account,
-                    credentials: credentials,
-                    folder: inbox,
-                    cursor: initialCursor,
-                    limit: Self.headerWindowSize
-                )
+                // 3) Per-folder header fetch + upsert. Cursor starts
+                //    empty (full window of the most recent N) — C1
+                //    will wire the persisted `SyncCursor`. Each folder
+                //    is its own transaction inside the repository so
+                //    one failing folder doesn't roll back the others.
+                for folder in foldersToFetch {
+                    let initialCursor = SyncCursor(lastUID: 0, uidValidity: nil, highestModseq: nil, lastFullSync: nil)
+                    let remoteFolder = remoteFolders.first { $0.remoteID == folder.remoteID }
+                        ?? RemoteFolder(remoteID: folder.remoteID, name: folder.name, role: folder.role)
+                    let result: FetchHeadersResult
+                    do {
+                        result = try await adapter.fetchHeaders(
+                            account: account,
+                            credentials: credentials,
+                            folder: remoteFolder,
+                            cursor: initialCursor,
+                            limit: Self.headerWindowSize
+                        )
+                    } catch {
+                        // One folder failing (e.g. permissions on
+                        // Drafts) shouldn't kill the rest. Log + move
+                        // on; the user still gets Inbox.
+                        MailClientLogger.sync.error(
+                            "fetchHeaders(\(folder.remoteID)) failed: \(error.localizedDescription)"
+                        )
+                        continue
+                    }
 
-                for remote in result.headers {
-                    let message = Self.makeMailMessage(
-                        from: remote,
+                    await repository.upsertRemoteHeaders(
+                        result.headers,
+                        folder: folder,
                         account: account
                     )
-                    fetchedHeaders.append(message)
-                }
+                    totalFetched += result.headers.count
 
-                // 3) Eager body window — only for the freshest few so
-                //    the UX of "click newest, see content immediately"
-                //    is preserved. Older messages get fetched on
-                //    selection.
-                let prefetchTargets = result.headers.prefix(Self.bodyPrefetchCount).map { remote in
-                    BodyJob(
-                        account: account,
-                        credentials: credentials,
-                        adapter: adapter,
-                        folder: inbox,
-                        remoteHeader: remote
-                    )
+                    // 4) Body prefetch only for the freshest inbox
+                    //    messages. Sent/Drafts open via user click; we
+                    //    don't burn bandwidth speculatively on them.
+                    if folder.role == .inbox {
+                        let prefetchTargets = result.headers
+                            .prefix(Self.bodyPrefetchCount)
+                            .map { remote in
+                                BodyJob(
+                                    account: account,
+                                    credentials: credentials,
+                                    adapter: adapter,
+                                    folder: remoteFolder,
+                                    remoteHeader: remote
+                                )
+                            }
+                        bodyJobs.append(contentsOf: prefetchTargets)
+                    }
                 }
-                bodyJobs.append(contentsOf: prefetchTargets)
 
                 await accountService.markSyncSuccess(for: account.id)
             } catch {
                 if firstError == nil { firstError = error }
-                await accountService.markSyncFailure(for: account.id, message: error.localizedDescription)
+                await accountService.markSyncFailure(
+                    for: account.id,
+                    message: error.localizedDescription
+                )
             }
         }
 
-        if fetchedHeaders.isEmpty, let firstError {
+        if totalFetched == 0, let firstError {
             throw firstError
         }
-
-        // Header plane: rebuild the inbox snapshot, preserve local-only
-        // items (drafts/sent that didn't come from the server). Same
-        // pattern as the legacy service — keeps the contract with
-        // `MailRepository.saveMessages` honest.
-        let existingMessages = await repository.loadMessages()
-        let localMessages = existingMessages.filter { $0.sidebarItem != .allMail }
-        let sortedMessages = fetchedHeaders.sorted { $0.timestampLabel > $1.timestampLabel }
-        await repository.saveMessages(sortedMessages + localMessages)
 
         // Body plane: serialize body fetches per account. IMAP doesn't
         // pipeline well across mailboxes anyway, and serial keeps the
@@ -174,11 +212,13 @@ actor MailSyncEngine {
                 let messageID = Self.synthesizeMessageID(for: job.remoteHeader, accountID: job.account.id)
                 await repository.storeBody(messageID: messageID, body: body)
             } catch {
-                MailClientLogger.sync.error("Body prefetch failed for UID \(job.remoteHeader.remoteUID): \(error.localizedDescription)")
+                MailClientLogger.sync.error(
+                    "Body prefetch failed for UID \(job.remoteHeader.remoteUID): \(error.localizedDescription)"
+                )
             }
         }
 
-        return fetchedHeaders.count
+        return totalFetched
     }
 
     // MARK: - Send

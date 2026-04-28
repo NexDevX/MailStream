@@ -6,6 +6,11 @@ struct MailMessageSummary: Identifiable, Hashable, Sendable {
     let id: UUID
     let accountID: UUID
     let folderID: Int64
+    /// Logical role of the parent folder. Populated by the JOIN in
+    /// `summariesForAccount` so the read path can map a row back to
+    /// the user-facing `SidebarItem` (inbox / sent / drafts / trash)
+    /// without a second SELECT per message.
+    let folderRole: MailFolderRole
     let remoteUID: Int64
     let subject: String
     let fromName: String
@@ -37,15 +42,20 @@ struct MessageDAO {
     /// Use the streaming variant `enumerate` if you might display 10 000+ items
     /// — but the LazyVStack only renders visible rows so an `Array` of even
     /// 5 000 summaries is comfortably under 5 MB.
+    /// Per-folder summaries. Joined to `folders` so callers get the
+    /// role without a second round-trip — the list view needs it for
+    /// SidebarItem mapping.
     func summaries(folderID: Int64, limit: Int = 200) async throws -> [MailMessageSummary] {
         let rows = try await db.sqlite.queryAll(
             """
-            SELECT id, account_id, folder_id, remote_uid, subject,
-                   from_name, from_address, preview, received_at,
-                   flags_seen, flags_flagged, has_attachment, label_keys
-              FROM messages
-             WHERE folder_id = ?
-             ORDER BY received_at DESC
+            SELECT m.id, m.account_id, m.folder_id, m.remote_uid, m.subject,
+                   m.from_name, m.from_address, m.preview, m.received_at,
+                   m.flags_seen, m.flags_flagged, m.has_attachment, m.label_keys,
+                   f.role AS folder_role
+              FROM messages m
+              LEFT JOIN folders f ON f.id = m.folder_id
+             WHERE m.folder_id = ?
+             ORDER BY m.received_at DESC
              LIMIT ?
             """,
             [.integer(folderID), .integer(Int64(limit))]
@@ -56,12 +66,14 @@ struct MessageDAO {
     func summariesForAccount(_ accountID: UUID, limit: Int = 200) async throws -> [MailMessageSummary] {
         let rows = try await db.sqlite.queryAll(
             """
-            SELECT id, account_id, folder_id, remote_uid, subject,
-                   from_name, from_address, preview, received_at,
-                   flags_seen, flags_flagged, has_attachment, label_keys
-              FROM messages
-             WHERE account_id = ?
-             ORDER BY received_at DESC
+            SELECT m.id, m.account_id, m.folder_id, m.remote_uid, m.subject,
+                   m.from_name, m.from_address, m.preview, m.received_at,
+                   m.flags_seen, m.flags_flagged, m.has_attachment, m.label_keys,
+                   f.role AS folder_role
+              FROM messages m
+              LEFT JOIN folders f ON f.id = m.folder_id
+             WHERE m.account_id = ?
+             ORDER BY m.received_at DESC
              LIMIT ?
             """,
             [.text(accountID.uuidString), .integer(Int64(limit))]
@@ -227,6 +239,13 @@ struct MessageDAO {
             let receivedMs = row.int("received_at")
         else { return nil }
 
+        // Role comes from the JOIN — when the row is read through
+        // `body(messageID:)` (no JOIN) the column is absent and we
+        // fall back to `.other`. Callers that care about role go
+        // through `summaries*`, which always projects it.
+        let role = row.text("folder_role")
+            .flatMap(MailFolderRole.init(rawValue:)) ?? .other
+
         let labels: [String] = row.text("label_keys")
             .flatMap { try? JSONDecoder().decode([String].self, from: Data($0.utf8)) } ?? []
 
@@ -234,6 +253,7 @@ struct MessageDAO {
             id: id,
             accountID: accountID,
             folderID: folderID,
+            folderRole: role,
             remoteUID: remoteUID,
             subject: row.text("subject") ?? "",
             fromName: row.text("from_name") ?? "",

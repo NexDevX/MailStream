@@ -48,14 +48,16 @@ folders. Gmail and Outlook gain OAuth2 entry points.
 | A3 | ✅ 2026-04-27 | `GenericIMAPAdapter` + `QQMailAdapter` thin config. |
 | A4 | ✅ 2026-04-28 | `MailSyncEngine` replaces `MailSyncService`. Stable `MailMessage.id` via `SHA1(account ‖ UID)`. 8 tests. |
 | A5 | ✅ 2026-04-28 | `AppContainer.live` wires `MailProviderAdapterRegistry([QQMailAdapter()])`; legacy `MailProvider` / `QQMailProvider` / SMTP helpers retired. |
-| A6 | 🔜 | Persist folder list per account; sidebar reads from `folders` table; repository accepts `RemoteHeader` directly so `remoteUID` / `messageID` / `threadID` are first-class. |
+| A6 | ✅ 2026-04-28 | `MailRepository.upsertFolders` / `upsertRemoteHeaders` / `listFolders` land. Sync engine persists every server folder, fetches headers for the four `SidebarItem`-navigable roles (inbox/sent/drafts/trash), and writes through the new path so real IMAP UID + `messageID` + folder PK survive on disk. Read path's `compose` now maps `folderRole → SidebarItem`. Sidebar still uses the static enum — folder-row UI is deferred. 1 new round-trip test. |
 | A7 | ✅ 2026-04-28 | IMAP-UTF7 mailbox name decoding (`IMAPResponseParser.decodeMailboxName`). 5 tests. Was a follow-up after live smoke turned up `&UXZO1mWHTvZZOQ-` from QQ. |
 | A8 | ✅ 2026-04-28 | Live smoke harness — `IMAPLiveSmokeTests`, gated on `docs/password.TXT`, exercises full validate → list → fetchHeaders → fetchBody chain end-to-end against a real account. |
 
 **Done when:** QQ account connects, all server folders visible in
 sidebar, message body lazy-loads via `BODY[]` IMAP fetch, send goes
-through SMTP. The first three are already verified by smoke; sidebar
-still reads the static enum until A6 lands.
+through SMTP. Sidebar showing **real** folder names (Chinese / custom
+folders) instead of the static enum is the last piece — tracked
+separately as a sidebar-UI task; the persistence shape behind it is
+now ready.
 
 ### Workstream B — OAuth2 entry points
 
@@ -171,3 +173,12 @@ date and rationale. The decision matters more than the alternatives.
   Swift Testing runner; file-presence is observable both at suite
   registration time (`@Suite(.disabled(if:))`) and inside test
   bodies, with no extra command-line plumbing.
+- **2026-04-28** — Repository gains `upsertFolders` /
+  `upsertRemoteHeaders` / `listFolders` (workstream A6). Sync engine
+  writes through this provider-shape path so real IMAP UID +
+  Message-ID + folder PK survive on disk without round-tripping
+  through `MailMessage`. Read path's `compose` derives the user-
+  facing `SidebarItem` from the persisted folder role via a JOIN,
+  which means Sent / Drafts / Trash now actually populate when
+  the sync engine fetches their folders. Sidebar UI still uses the
+  static enum until folder-row rendering lands; the data is ready.

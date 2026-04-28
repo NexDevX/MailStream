@@ -101,6 +101,95 @@ provider integration is one-and-done.
 
 ---
 
+## 2026-04-28 (later still) — Folder persistence + provider-shape header upsert (A6)
+
+### What landed
+- **`MailRepository` gains a folder plane.** New protocol methods —
+  `upsertFolders(_:for:)`, `upsertRemoteHeaders(_:folder:account:)`,
+  `listFolders(for:)` — with no-op defaults so test repos don't have
+  to care. Production `MailStoreRepository` overrides all three and
+  goes through `FolderDAO` / `MessageDAO` directly.
+  *Core/Services/MailRepository.swift, Persistence/MailStoreRepository.swift*
+- **Sync engine multi-folder.** `MailSyncEngine.refreshAll` now:
+  1. Lists folders via `adapter.listFolders` (decoded names from A7).
+  2. Persists every folder via `repository.upsertFolders` so the
+     full server taxonomy (inbox / sent / drafts / trash / junk /
+     archive / `其他文件夹` / …) lives on disk — even folders the
+     UI can't render yet.
+  3. Fetches headers for the four `SidebarItem`-navigable roles
+     (`inbox` / `sent` / `drafts` / `trash`) and writes through
+     `repository.upsertRemoteHeaders`, which lands real IMAP UID,
+     Message-ID, and folder PK on disk. No more
+     `MailMessage.id.hashValue` synthesized into `remote_uid`.
+  4. Body prefetch is now Inbox-only (Sent/Drafts open lazily on
+     click; we don't burn bandwidth speculatively on them).
+  *Core/Services/MailSyncEngine.swift*
+- **Read path role-aware.** `MessageDAO.summaries*` now LEFT JOIN
+  `folders` and project `role` into the summary. `MailStoreRepository.compose`
+  maps that role onto the user-facing `SidebarItem`
+  (sent → .sent, drafts → .drafts, trash/junk → .trash, everything
+  else → .allMail). This is why Sent / Drafts now actually show
+  their respective rows after a sync — previously every row was
+  hard-coded to `.allMail`.
+  *Persistence/DAO/MessageDAO.swift, Persistence/MailStoreRepository.swift*
+- **Sent-mirror dedup.** The legacy `persistHeader` path (used by
+  outgoing-send local Sent mirror) now reuses an existing folder of
+  the matching role if one is on disk, instead of creating a
+  parallel `remote_id="sent"` folder next to the IMAP-listed
+  `remote_id="Sent Messages"` row.
+  *Persistence/MailStoreRepository.swift*
+- **Test coverage.** `remoteHeaderUpsertPathRoundTrips` exercises
+  `upsertFolders` → `upsertRemoteHeaders` → `loadMessages` →
+  `listFolders` end-to-end, including the role → SidebarItem
+  mapping and the (account, folder, remote_uid) idempotency
+  contract.
+  *Tests/PersistenceTests.swift*
+
+### Why
+The pre-A6 path was load-bearing on a fiction: every header went
+`RemoteHeader → MailMessage → HeaderUpsert(remote_id=role.rawValue,
+remote_uid=hash(MailMessage.id))`. Two consequences bit hard once
+the live smoke harness exercised real data:
+
+1. **Multi-folder broke immediately.** Every folder used the same
+   synthetic `remote_id` (`"sent"`, `"inbox"`), so even `LIST` ran
+   into the unique index on `(account_id, remote_id)` the moment a
+   second account connected.
+2. **Flag round-trip would not survive a relaunch.** `IMAP STORE
+   UID 4711 +FLAGS (\Seen)` needs the *real* UID — the synthesized
+   hash UIDs were stable across resyncs but completely fictional
+   from the server's POV. Phase 3.C1 (cursor + flag round-trip)
+   couldn't ship without this fix.
+
+### Tests
+- `xcodebuild build` — pass.
+- `xcodebuild test` — 43/43 pass (added
+  `remoteHeaderUpsertPathRoundTrips`, exercises the new
+  `upsertFolders` → `upsertRemoteHeaders` → `loadMessages` chain
+  end-to-end against an on-disk SQLite file plus the role →
+  SidebarItem composition contract).
+- `IMAPLiveSmokeTests` (validate / list / fetchHeaders / fetchBody
+  against the real QQ account) still passes — it exercises the
+  adapter directly, not the new repository path, but it confirms
+  the IMAP wire layer this code feeds from didn't regress.
+- **Live app smoke not yet run.** Use Settings → Debug → wipe →
+  force-sync to verify on a real account that Sent/Drafts/Trash now
+  populate after sync; report back if the message list looks wrong.
+
+### Next
+- Sidebar UI: render the real folder list from `folders` so QQ
+  custom folders (`其他文件夹` etc.) become navigable. Pure
+  navigation-chrome work; the data is ready.
+- Workstream C1: `SyncStateDAO` cursor advancement, UIDVALIDITY
+  change detection. The sync engine still asks for a full window
+  every refresh — A6 made the *write* idempotent, but the *read*
+  is still O(N) per refresh.
+- Wire those four orphan Settings → 通用 toggles
+  (`notificationsEnabled` / `badgesEnabled` /
+  `openLinksExternally`) to actual runtime behaviour.
+
+---
+
 ## 2026-04-28 — Phase 3 wire-up (workstream A4/A5)
 
 ### What landed
