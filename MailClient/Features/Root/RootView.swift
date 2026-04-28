@@ -4,9 +4,21 @@ import AppKit
 struct RootView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var theme: ThemeController
-    /// User-resizable list pane width. Persisted via @AppStorage so the
-    /// user's preference survives relaunches.
+    /// Persisted list pane width. Read once on appear, written once
+    /// on drag-end — never mid-drag. See `liveListWidth` below for
+    /// why this matters.
     @AppStorage("mailclient.layout.listWidth") private var listWidth: Double = 460
+    /// In-flight pane width while the user is actively dragging the
+    /// resizer. `nil` means "no drag in progress, use the persisted
+    /// value". Buffering here keeps the per-frame width updates in
+    /// memory instead of round-tripping through `@AppStorage` →
+    /// UserDefaults synchronous IO, which on every frame of a drag
+    /// caused a feedback storm: write to disk, view tree
+    /// invalidates, layout re-runs, drag tick fires again, repeat.
+    /// The visible symptom was both panes "jittering" while
+    /// resizing. Drag-end calls `onCommit` once with the final
+    /// value, which is the only point we touch `@AppStorage`.
+    @State private var liveListWidth: CGFloat?
     /// Mirror of the Settings → 通用 → 角标 toggle. Drives the dock
     /// tile badge: when on we render the unread count, when off we
     /// blank it. The toggle is the single source of truth — flipping
@@ -158,10 +170,15 @@ struct RootView: View {
 
         let listMin: CGFloat = layout.listMinWidth
         let listMax: CGFloat = max(listMin + 40, size.width - sidebarTrack - layout.detailMinWidth)
-        let clampedWidth = min(max(CGFloat(listWidth), listMin), listMax)
+        // Prefer the live (in-drag) value over the persisted one.
+        // Once the drag ends `liveListWidth` is reset to nil and we
+        // fall back to `listWidth`, which by then has been written
+        // to disk exactly once.
+        let baseWidth = liveListWidth ?? CGFloat(listWidth)
+        let clampedWidth = min(max(baseWidth, listMin), listMax)
         let bindable = Binding<CGFloat>(
             get: { clampedWidth },
-            set: { listWidth = Double($0) }
+            set: { liveListWidth = $0 }
         )
 
         HStack(spacing: 0) {
@@ -182,7 +199,15 @@ struct RootView: View {
             VerticalResizer(
                 width: bindable,
                 bounds: listMin...listMax,
-                defaultWidth: layout.listIdealWidth
+                defaultWidth: layout.listIdealWidth,
+                onCommit: { final in
+                    // Single AppStorage write at drag-end. Clearing
+                    // `liveListWidth` AFTER the AppStorage write so
+                    // the next render sees the persisted value
+                    // without a frame of stale 0/old data.
+                    listWidth = Double(final)
+                    liveListWidth = nil
+                }
             )
 
             MessageDetailView(

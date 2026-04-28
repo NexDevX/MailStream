@@ -16,7 +16,16 @@ struct VerticalResizer: View {
     @Binding var width: CGFloat
     let bounds: ClosedRange<CGFloat>
     let defaultWidth: CGFloat
+    /// Fired on every drag tick. Use for cheap, transient updates.
     var onChanged: ((CGFloat) -> Void)? = nil
+    /// Fired exactly once when the drag (or double-click reset)
+    /// finishes. Use for expensive writes — `@AppStorage`,
+    /// UserDefaults, server sync — so the heavy work doesn't run
+    /// per-frame and feed back into the layout pipeline. Without
+    /// this split a `@AppStorage`-bound width syncs to disk on
+    /// every frame of the drag, which manifests as the entire
+    /// HStack jittering as the layout pipeline races the IO.
+    var onCommit: ((CGFloat) -> Void)? = nil
 
     @State private var isHovered = false
     @State private var dragStart: CGFloat?
@@ -48,11 +57,21 @@ struct VerticalResizer: View {
                         width = clamped
                         onChanged?(clamped)
                     }
-                    .onEnded { _ in dragStart = nil }
+                    .onEnded { _ in
+                        // Only commit if a real drag happened. Pure
+                        // hover-and-release with no movement leaves
+                        // dragStart nil; we skip the commit so we
+                        // don't write the same value back.
+                        if dragStart != nil {
+                            onCommit?(width)
+                        }
+                        dragStart = nil
+                    }
             )
             .onTapGesture(count: 2) {
                 width = defaultWidth
                 onChanged?(defaultWidth)
+                onCommit?(defaultWidth)
             }
             .accessibilityLabel("Resize divider")
     }
