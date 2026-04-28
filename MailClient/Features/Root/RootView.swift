@@ -1,10 +1,16 @@
 import SwiftUI
+import AppKit
 
 struct RootView: View {
     @EnvironmentObject private var appState: AppState
     /// User-resizable list pane width. Persisted via @AppStorage so the
     /// user's preference survives relaunches.
     @AppStorage("mailclient.layout.listWidth") private var listWidth: Double = 460
+    /// Mirror of the Settings → 通用 → 角标 toggle. Drives the dock
+    /// tile badge: when on we render the unread count, when off we
+    /// blank it. The toggle is the single source of truth — flipping
+    /// it from any view immediately reflects on the dock.
+    @AppStorage("mailclient.desktop.badges") private var badgesEnabled = true
 
     var body: some View {
         ZStack {
@@ -49,13 +55,38 @@ struct RootView: View {
         .animation(DS.Motion.surface, value: appState.snoozeBannerMessage)
         .animation(DS.Motion.surface, value: appState.isShowingCommandPalette)
         .animation(DS.Motion.surface, value: appState.route)
-        .onAppear { syncRouteWithAccounts() }
+        .onAppear {
+            syncRouteWithAccounts()
+            updateDockBadge()
+        }
         .onChange(of: appState.accounts) { syncRouteWithAccounts() }
+        .onChange(of: appState.messages) { updateDockBadge() }
+        .onChange(of: badgesEnabled) { updateDockBadge() }
         .onChange(of: appState.isShowingCompose) {
             if appState.isShowingCompose {
                 appState.openCompose()
                 appState.isShowingCompose = false
             }
+        }
+    }
+
+    /// Push the unread count onto `NSApp.dockTile.badgeLabel`, or
+    /// clear it when the user has the toggle off (or there's nothing
+    /// to show). `unreadCount` is currently a UI-layer heuristic
+    /// (`max(1, allMessages/3)`) — once the DAO surfaces real
+    /// `flags_seen == 0` counts on `MailMessage`, the same wiring
+    /// reads through. Setter must run on the main actor; `onChange`
+    /// already gives us that guarantee inside SwiftUI.
+    private func updateDockBadge() {
+        let dock = NSApp.dockTile
+        guard badgesEnabled else {
+            if dock.badgeLabel != nil { dock.badgeLabel = nil }
+            return
+        }
+        let count = appState.unreadCount
+        let label: String? = count > 0 ? String(count) : nil
+        if dock.badgeLabel != label {
+            dock.badgeLabel = label
         }
     }
 

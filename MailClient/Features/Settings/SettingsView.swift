@@ -3,8 +3,19 @@ import SwiftUI
 /// Inline settings surface — replaces the old `Settings { }` popup.
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
+    /// **Currently inert.** Posting macOS notifications needs
+    /// `UNUserNotificationCenter.requestAuthorization` + an Info.plist
+    /// `NSUserNotificationsUsageDescription` and an entitled bundle
+    /// id; until that scaffolding lands, the toggle stores the user's
+    /// preference but no code path reads it. Tracked as a Phase 4
+    /// follow-up. The other two toggles below *do* take effect.
     @AppStorage("mailclient.notifications.enabled") private var notificationsEnabled = true
+    /// Read by `RootView.updateDockBadge` to drive
+    /// `NSApp.dockTile.badgeLabel`. Effective immediately.
     @AppStorage("mailclient.desktop.badges") private var badgesEnabled = true
+    /// Read by `HTMLMessageBodyView.Coordinator.decidePolicyFor` —
+    /// off → tapped links don't escape the app (privacy mode).
+    /// Effective on the very next click; the WebView is not rebuilt.
     @AppStorage("mailclient.links.external") private var openLinksExternally = true
 
     @State private var selectedSection: Section = .accounts

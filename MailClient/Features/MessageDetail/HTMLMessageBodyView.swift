@@ -118,7 +118,14 @@ struct HTMLMessageBodyView: NSViewRepresentable {
         var lastLoadedHTML: String?
         init(_ parent: HTMLMessageBodyView) { self.parent = parent }
 
-        // Navigation: open external links in the system browser.
+        // Navigation: open external links in the system browser, or
+        // swallow them entirely when the user has disabled
+        // `Settings → 通用 → 在浏览器中打开链接`. Read live from
+        // UserDefaults so a flip in Settings affects the very next
+        // click without rebuilding the WebView. We always cancel the
+        // in-WebView navigation — letting WKWebView load `https://…`
+        // would replace the rendered email body in place, which is
+        // never what the user wants.
         func webView(
             _ webView: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
@@ -126,9 +133,15 @@ struct HTMLMessageBodyView: NSViewRepresentable {
         ) {
             switch navigationAction.navigationType {
             case .linkActivated, .formSubmitted, .formResubmitted:
-                if let url = navigationAction.request.url {
+                let opensExternally = UserDefaults.standard
+                    .object(forKey: "mailclient.links.external") as? Bool ?? true
+                if opensExternally, let url = navigationAction.request.url {
                     NSWorkspace.shared.open(url)
                 }
+                // When the toggle is off we still cancel — the email
+                // body stays put. The link effectively becomes
+                // copy-only, which is the privacy-preserving
+                // semantic the toggle promises.
                 decisionHandler(.cancel)
             default:
                 decisionHandler(.allow)
