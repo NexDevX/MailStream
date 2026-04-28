@@ -1,6 +1,23 @@
 import SwiftUI
 import AppKit
 
+/// SwiftUI environment flag that is `true` exactly while the user is
+/// dragging the list / detail divider. Heavy children — most
+/// importantly the WKWebView in the message body — read this and
+/// suppress their own re-layout / re-measurement work for the
+/// duration of the drag so the layout pipeline isn't fighting
+/// per-frame HTML reflows.
+private struct IsResizingPanesKey: EnvironmentKey {
+    static let defaultValue: Bool = false
+}
+
+extension EnvironmentValues {
+    var isResizingPanes: Bool {
+        get { self[IsResizingPanesKey.self] }
+        set { self[IsResizingPanesKey.self] = newValue }
+    }
+}
+
 struct RootView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var theme: ThemeController
@@ -217,6 +234,12 @@ struct RootView: View {
             .frame(minWidth: layout.detailMinWidth, maxWidth: .infinity)
         }
         .frame(maxHeight: .infinity)
+        // Broadcast to descendants whether the resizer is actively
+        // being dragged. The HTML body view in MessageDetailView
+        // ignores its own height callback while this is true; that
+        // single change kills the vertical jitter that survived the
+        // earlier @AppStorage write fix.
+        .environment(\.isResizingPanes, liveListWidth != nil)
         .animation(DS.Motion.surface, value: sidebarVisible)
     }
 

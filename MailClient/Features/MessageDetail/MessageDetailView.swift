@@ -661,6 +661,16 @@ private struct QuickReplyBox: View {
 
 private struct HTMLBodyContainer: View {
     @EnvironmentObject private var appState: AppState
+    /// Set to `true` while the user is dragging the list/detail pane
+    /// resizer in `RootView`. While true we suppress the WKWebView
+    /// height callback so `contentHeight` doesn't bounce up and down
+    /// in lock-step with the HTML reflowing at every drag tick — the
+    /// observable symptom was the body content jumping vertically
+    /// throughout the drag, which read as "wild flickering". The
+    /// last height the JS reported before the drag started stays
+    /// pinned; on drag-end the JS will fire one more measurement
+    /// (its rAF loop is still alive) which we accept normally.
+    @Environment(\.isResizingPanes) private var isResizingPanes
     let messageID: UUID
     let html: String
 
@@ -676,6 +686,14 @@ private struct HTMLBodyContainer: View {
             html: html,
             allowRemoteImages: allowRemoteImages,
             onContentHeight: { newHeight in
+                // Drop height updates that arrive while the user is
+                // actively resizing panes. Without this the WebView
+                // reflows on every drag tick, posts a slightly
+                // different height each time, and the @State update
+                // re-frames the WebView vertically — visible as
+                // jitter even though the user is only moving
+                // horizontally.
+                guard !isResizingPanes else { return }
                 // Defense in depth against the resize-feedback bug:
                 //  · ceil + 4 absorbs sub-pixel rounding
                 //  · ignore changes < 4 px (the JS already filters at 2)
