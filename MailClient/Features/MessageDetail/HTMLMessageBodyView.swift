@@ -36,6 +36,12 @@ import WebKit
 struct HTMLMessageBodyView: NSViewRepresentable {
     let html: String
     var allowRemoteImages: Bool = false
+    /// While `true`, the underlying WKWebView ignores width changes
+    /// at the AppKit layer (`setFrameSize` clamps width to the last
+    /// committed value). Set this from the SwiftUI side during pane
+    /// resize drags so the HTML doesn't keep reflowing — the visible
+    /// "flicker" symptom the user reported.
+    var isResizing: Bool = false
     var onContentHeight: (CGFloat) -> Void = { _ in }
 
     func makeNSView(context: Context) -> WKWebView {
@@ -73,6 +79,17 @@ struct HTMLMessageBodyView: NSViewRepresentable {
         // callback closure invokes the *current* SwiftUI state setter,
         // not the one captured when the coordinator was first built.
         context.coordinator.parent = self
+
+        // Push the resize-freeze flag down to the AppKit layer. This
+        // is the actual fix for the "email body keeps flickering
+        // during pane drag" report — the SwiftUI `frame(width:)`
+        // path was unreliable because the NSHostingView still issues
+        // setFrameSize to the WKWebView based on its own resize
+        // pass. Intercepting setFrameSize on the WKWebView subclass
+        // is the only place that's guaranteed to win.
+        if let passthrough = view as? ScrollPassthroughWebView {
+            passthrough.freezeWidth = isResizing
+        }
 
         let processed = allowRemoteImages ? html : Self.blockRemoteAssets(in: html)
         let wrapped = Self.wrap(processed)
@@ -355,7 +372,33 @@ private enum ScriptHost {
 // cursor sits. Clicks, text selection, link activation are unaffected
 // because they go through different responder methods.
 
-private final class ScrollPassthroughWebView: WKWebView {
+final class ScrollPassthroughWebView: WKWebView {
+    /// When true, `setFrameSize` ignores incoming width changes and
+    /// keeps the previously committed width. Driven by the parent
+    /// SwiftUI view via `HTMLMessageBodyView.updateNSView`. The
+    /// height portion of any frame change is still honoured because
+    /// content height legitimately changes when the user toggles
+    /// "show images" or similar — only horizontal reflow during a
+    /// pane drag is the problem we're suppressing.
+    var freezeWidth: Bool = false
+    private var lastCommittedWidth: CGFloat = 0
+
+    override func setFrameSize(_ newSize: NSSize) {
+        if freezeWidth, lastCommittedWidth > 0 {
+            // Drop the width portion of the proposed change. AppKit
+            // is asking us to widen / narrow because the parent
+            // SwiftUI HStack is redistributing space mid-drag, but
+            // letting that through forces WebKit to re-layout the
+            // document, which is the visible "flicker".
+            super.setFrameSize(NSSize(width: lastCommittedWidth, height: newSize.height))
+            return
+        }
+        super.setFrameSize(newSize)
+        if newSize.width > 0 {
+            lastCommittedWidth = newSize.width
+        }
+    }
+
     override func scrollWheel(with event: NSEvent) {
         // Forward to the next responder so the parent SwiftUI
         // ScrollView gets the wheel event. We deliberately do NOT
