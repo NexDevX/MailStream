@@ -675,6 +675,15 @@ private struct HTMLBodyContainer: View {
     let html: String
 
     @State private var contentHeight: CGFloat = 200
+    /// Last width the layout pipeline allotted to the WebView while
+    /// the user was *not* dragging. While `isResizingPanes` is true
+    /// we pin the WebView to this width so the HTML stops reflowing
+    /// on every drag tick. The surrounding container still grows /
+    /// shrinks with the available space; the visual effect is "the
+    /// email body stays put, the gutter around it changes". This
+    /// matches how Mail.app, Things, and Notes behave during pane
+    /// resizes.
+    @State private var frozenWidth: CGFloat?
     /// Persisted preference: load remote images by default. Defaults to
     /// `true` per product decision — privacy is a non-goal for this app's
     /// initial audience and the silent placeholders confused users.
@@ -704,9 +713,40 @@ private struct HTMLBodyContainer: View {
                 }
             }
         )
+        // Pin the WebView's width to the last steady-state value
+        // during a drag. `frame(width: nil, ...)` is a no-op when
+        // not resizing, so the WebView fills the proposed width
+        // through the outer `maxWidth: .infinity` frame as before.
+        .frame(width: isResizingPanes ? frozenWidth : nil, alignment: .leading)
         .frame(height: contentHeight)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Read the WebView's current width into `frozenWidth` only
+        // when we are *not* dragging. This captures the last steady
+        // width before each drag begins; on drag-start the captured
+        // value freezes and stops updating until the drag ends.
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: BodyWidthPreferenceKey.self,
+                    value: proxy.size.width
+                )
+            }
+        )
+        .onPreferenceChange(BodyWidthPreferenceKey.self) { width in
+            guard !isResizingPanes, width > 0 else { return }
+            frozenWidth = width
+        }
         // Reset state when the user navigates to a different message.
         .id(messageID)
+    }
+}
+
+/// Captures the WKWebView's allotted width so we can freeze it
+/// during a pane drag. Lives outside `HTMLBodyContainer` because
+/// SwiftUI requires `PreferenceKey`s to be top-level types.
+private struct BodyWidthPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
