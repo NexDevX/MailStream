@@ -1,7 +1,16 @@
 import SwiftUI
+import AppKit
 
 struct SidebarView: View {
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var theme: ThemeController
+    /// Cached center of the theme toggle button, in the
+    /// `RootView.coordinateSpace` system. Captured by a
+    /// `GeometryReader` background and read at tap time so the
+    /// reveal disc starts exactly under the button. Recomputed on
+    /// every layout pass so window resizes / sidebar toggles don't
+    /// stale-cache the position.
+    @State private var themeButtonCenter: CGPoint = .zero
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -219,6 +228,46 @@ struct SidebarView: View {
         .init(id: "client",  name: "客户", color: DS.Color.labelClient)
     ]
 
+    // MARK: – Theme toggle
+
+    /// Sun ↔ Moon button that drives the circular reveal animation.
+    /// The icon shows the **destination** mode (the *other* of where
+    /// you currently are) so the user reads it as "click to go
+    /// there". The frame in the root coordinate space is captured
+    /// continuously via the `GeometryReader` background so the disc
+    /// origin stays accurate under window resizes / sidebar
+    /// re-layouts; the captured center is read at tap time.
+    private var themeToggleButton: some View {
+        let goingDark = theme.mode == .light
+        return Button {
+            // Window size from AppKit — the SwiftUI side has no
+            // single source of truth that's accurate during a
+            // potentially in-flight transition. `keyWindow` is the
+            // user-active window; falls back to the first visible
+            // one for the (rare) menu-bar-focus case.
+            let win = NSApp.keyWindow ?? NSApp.windows.first
+            let size = win?.contentLayoutRect.size ?? CGSize(width: 1280, height: 800)
+            theme.toggle(origin: themeButtonCenter, windowSize: size)
+        } label: {
+            DSIcon(name: goingDark ? .moon : .sun, size: 13)
+                .foregroundStyle(DS.Color.ink3)
+                .frame(width: 24, height: 24)
+                .background(
+                    GeometryReader { proxy in
+                        let frame = proxy.frame(in: .named(RootView.coordinateSpace))
+                        let center = CGPoint(x: frame.midX, y: frame.midY)
+                        Color.clear
+                            .onAppear  { themeButtonCenter = center }
+                            .onChange(of: frame) { _, new in
+                                themeButtonCenter = CGPoint(x: new.midX, y: new.midY)
+                            }
+                    }
+                )
+        }
+        .buttonStyle(.plain)
+        .help(goingDark ? "切换到深色模式" : "切换到浅色模式")
+    }
+
     // MARK: – User footer
 
     private var userFooter: some View {
@@ -246,6 +295,7 @@ struct SidebarView: View {
                 }
             }
             Spacer(minLength: 0)
+            themeToggleButton
             Button {
                 appState.route = .settings
             } label: {

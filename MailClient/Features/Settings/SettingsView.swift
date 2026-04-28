@@ -92,10 +92,16 @@ struct SettingsView: View {
                 Text(label(for: section))
                     .font(DS.Font.sans(12, weight: isSelected ? .semibold : .medium))
                     .foregroundStyle(isSelected ? DS.Color.ink : DS.Color.ink2)
-                Spacer()
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, 9)
-            .frame(height: 28)
+            // Force the row to claim the full sidebar width — without
+            // this the HStack only spans icon + label and the empty
+            // gutter on the right is dead-zone for the Button's hit
+            // test. `contentShape(Rectangle())` then turns the whole
+            // padded area into the click target instead of just the
+            // glyphs / glyph-shaped runs.
+            .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
             .background(
                 Group {
                     if isSelected {
@@ -105,6 +111,7 @@ struct SettingsView: View {
                     }
                 }
             )
+            .contentShape(Rectangle())
             .compositingGroup()
         }
         .buttonStyle(.plain)

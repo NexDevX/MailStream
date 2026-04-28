@@ -3,6 +3,11 @@ import SwiftUI
 @main
 struct MailClientApp: App {
     @StateObject private var appState: AppState
+    /// Owns light/dark mode + the in-flight reveal animation. Lives at
+    /// `App` scope so toggling never triggers a window re-creation, and
+    /// so any view (sidebar, settings, command palette) can flip it via
+    /// `@EnvironmentObject`.
+    @StateObject private var themeController = ThemeController()
 
     init() {
         let container = AppContainer.live
@@ -13,6 +18,7 @@ struct MailClientApp: App {
         WindowGroup(appState.strings.appName) {
             RootView()
                 .environmentObject(appState)
+                .environmentObject(themeController)
                 // Floor low enough to fit a 13" laptop in split-screen
                 // (left half ≈ 720pt). RootView collapses the sidebar
                 // and switches to drilldown layout below 840pt.

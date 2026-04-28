@@ -3,6 +3,7 @@ import AppKit
 
 struct RootView: View {
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var theme: ThemeController
     /// User-resizable list pane width. Persisted via @AppStorage so the
     /// user's preference survives relaunches.
     @AppStorage("mailclient.layout.listWidth") private var listWidth: Double = 460
@@ -12,11 +13,29 @@ struct RootView: View {
     /// it from any view immediately reflects on the dock.
     @AppStorage("mailclient.desktop.badges") private var badgesEnabled = true
 
+    /// Coordinate space the theme toggle button reads its frame in
+    /// and the reveal overlay positions its disc against. They have
+    /// to share a name; this constant is the single source of truth.
+    static let coordinateSpace = "mailstream.appRoot"
+
     var body: some View {
         ZStack {
             routed
                 .id(appState.route)
                 .transition(routeTransition)
+
+            // Theme reveal overlay sits above all routes/banners but
+            // below nothing — it has to cover everything, including
+            // the command palette, so the wave reads as the *whole
+            // app* changing temperature, not just the mail pane.
+            if let transition = theme.transition {
+                ThemeRevealOverlay(
+                    transition: transition,
+                    onCommit: { theme.commitPendingTheme() },
+                    onComplete: { theme.clearTransition() }
+                )
+                .transition(.identity)
+            }
 
             if appState.isShowingCommandPalette {
                 CommandPaletteView()
@@ -52,6 +71,8 @@ struct RootView: View {
                 .frame(maxWidth: .infinity, alignment: .top)
             }
         }
+        .coordinateSpace(name: Self.coordinateSpace)
+        .preferredColorScheme(theme.mode.colorScheme)
         .animation(DS.Motion.surface, value: appState.snoozeBannerMessage)
         .animation(DS.Motion.surface, value: appState.isShowingCommandPalette)
         .animation(DS.Motion.surface, value: appState.route)
