@@ -213,4 +213,8 @@ struct MailProviderAdapterRegistry: Sendable {
     var availableProviders: [MailProviderType] {
         Array(adapters.keys)
     }
+
+    func isAvailable(_ providerType: MailProviderType) -> Bool {
+        adapters[providerType] != nil
+    }
 }

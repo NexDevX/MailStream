@@ -12,9 +12,16 @@ struct SettingsView: View {
     @Namespace private var sectionNamespace
 
     enum Section: String, CaseIterable, Identifiable {
-        case accounts, general, appearance, shortcuts, about
+        case accounts, general, appearance, shortcuts, debug, about
         var id: String { rawValue }
     }
+
+    // Debug-panel state. `wipeConfirmShown` gates the destructive
+    // "Reset all data" alert; `dbSize` is refreshed each time the
+    // panel appears so the user can watch it grow as sync runs.
+    @State private var dbSize: Int64 = 0
+    @State private var wipeConfirmShown = false
+    @State private var isWiping = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -98,6 +105,7 @@ struct SettingsView: View {
         case .general:    return .settings
         case .appearance: return .sun
         case .shortcuts:  return .command
+        case .debug:      return .bolt
         case .about:      return .help
         }
     }
@@ -109,6 +117,7 @@ struct SettingsView: View {
         case .general:    return zh ? "通用" : "General"
         case .appearance: return zh ? "外观" : "Appearance"
         case .shortcuts:  return zh ? "快捷键" : "Shortcuts"
+        case .debug:      return zh ? "调试" : "Debug"
         case .about:      return zh ? "关于" : "About"
         }
     }
@@ -125,6 +134,7 @@ struct SettingsView: View {
                     case .general:    generalPanel
                     case .appearance: appearancePanel
                     case .shortcuts:  shortcutsPanel
+                    case .debug:      debugPanel
                     case .about:      aboutPanel
                     }
                 }
@@ -273,6 +283,164 @@ struct SettingsView: View {
                 shortcutRow(label: appState.strings.settings, keys: ["⌘", ","])
             }
         }
+    }
+
+    // MARK: Debug
+    //
+    // Temporary affordance — exists so we can verify what the
+    // persistence layer is actually writing while the IMAP path is
+    // still being shaken out. Three actions:
+    //
+    //   1. "Force sync now" — kicks `MailSyncEngine.refreshAll()`. Same
+    //      code path the toolbar refresh button hits, surfaced here for
+    //      easy access while reading the DB pane.
+    //   2. "Show in Finder" — reveals the SQLite file so the user can
+    //      open it with DB Browser / .dump and confirm rows by hand.
+    //   3. "Reset all data" — destructive: disconnect every account
+    //      (clears Keychain + DB rows), drop+rebuild the schema,
+    //      invalidate the in-memory body cache. Gated by an alert.
+    //
+    // To remove: delete this panel + the four `@State` flags above +
+    // the corresponding `Section` case + the AppState debug helpers.
+
+    private var debugPanel: some View {
+        let zh = appState.language == .simplifiedChinese
+        return VStack(alignment: .leading, spacing: 14) {
+            panelHeading(
+                title: zh ? "调试" : "Debug",
+                subtitle: zh
+                    ? "临时开发工具：观察持久化、强制同步、清空本地缓存。"
+                    : "Temporary developer tools: inspect persistence, force sync, wipe local cache."
+            )
+
+            // Database info card
+            card {
+                settingRow(label: zh ? "数据库路径" : "Database path") {
+                    Text(appState.databaseFilePath ?? (zh ? "未挂载（内存模式）" : "Not mounted (in-memory)"))
+                        .font(DS.Font.mono(11))
+                        .foregroundStyle(DS.Color.ink3)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: 300, alignment: .trailing)
+                        .help(appState.databaseFilePath ?? "")
+                }
+                Divider().overlay(DS.Color.line)
+                settingRow(label: zh ? "占用空间" : "On-disk size") {
+                    Text(formatBytes(dbSize))
+                        .font(DS.Font.mono(11))
+                        .foregroundStyle(DS.Color.ink3)
+                }
+                Divider().overlay(DS.Color.line)
+                settingRow(label: zh ? "账号数 / 邮件数" : "Accounts / messages") {
+                    Text("\(appState.accounts.count) / \(appState.messages.count)")
+                        .font(DS.Font.mono(11))
+                        .foregroundStyle(DS.Color.ink3)
+                }
+            }
+
+            // Action buttons row
+            HStack(spacing: 8) {
+                Button {
+                    Task {
+                        await appState.refreshMailbox()
+                        dbSize = await appState.databaseSizeBytes()
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        DSIcon(name: .refresh, size: 11)
+                        Text(zh ? "立即同步" : "Force sync now")
+                            .font(DS.Font.sans(12, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .frame(height: 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
+                            .fill(appState.isRefreshingMailbox ? DS.Color.accent.opacity(0.5) : DS.Color.accent)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(appState.isRefreshingMailbox || isWiping)
+
+                Button {
+                    appState.revealDatabaseInFinder()
+                } label: {
+                    HStack(spacing: 5) {
+                        DSIcon(name: .folder, size: 11)
+                        Text(zh ? "在 Finder 中显示" : "Show in Finder")
+                            .font(DS.Font.sans(12, weight: .medium))
+                    }
+                    .foregroundStyle(DS.Color.ink2)
+                    .padding(.horizontal, 12)
+                    .frame(height: 28)
+                    .dsCard(cornerRadius: DS.Radius.md, fill: DS.Color.surface2)
+                }
+                .buttonStyle(.plain)
+                .disabled(appState.databaseFilePath == nil)
+
+                Spacer()
+
+                Button {
+                    wipeConfirmShown = true
+                } label: {
+                    HStack(spacing: 5) {
+                        DSIcon(name: .trash, size: 11)
+                        Text(zh ? "清空所有数据" : "Reset all data")
+                            .font(DS.Font.sans(12, weight: .semibold))
+                    }
+                    .foregroundStyle(DS.Color.red)
+                    .padding(.horizontal, 12)
+                    .frame(height: 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
+                            .fill(DS.Color.red.opacity(0.10))
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(isWiping)
+            }
+
+            Text(zh
+                 ? "“清空所有数据” 会断开全部账号、删除本地 SQLite 表并重建空 schema，仅用于排查同步异常时使用。"
+                 : "“Reset all data” disconnects every account, drops the local SQLite tables and re-creates an empty schema. Use only when debugging sync issues.")
+                .font(DS.Font.sans(11))
+                .foregroundStyle(DS.Color.ink3)
+                .padding(.top, 2)
+        }
+        .task(id: selectedSection) {
+            // Refresh the size readout each time the user navigates here
+            // so they don't need to flip away and back to see growth.
+            if selectedSection == .debug {
+                dbSize = await appState.databaseSizeBytes()
+            }
+        }
+        .alert(
+            zh ? "确认清空所有本地数据？" : "Reset all local data?",
+            isPresented: $wipeConfirmShown
+        ) {
+            Button(zh ? "取消" : "Cancel", role: .cancel) {}
+            Button(zh ? "清空" : "Reset", role: .destructive) {
+                Task {
+                    isWiping = true
+                    await appState.wipeLocalCache()
+                    dbSize = await appState.databaseSizeBytes()
+                    isWiping = false
+                }
+            }
+        } message: {
+            Text(zh
+                 ? "将断开所有账号、清除 Keychain 凭据并删除本地缓存的邮件。此操作无法撤销。"
+                 : "Disconnects every account, clears stored credentials, and drops every cached message. This cannot be undone.")
+        }
+    }
+
+    private func formatBytes(_ bytes: Int64) -> String {
+        let bcf = ByteCountFormatter()
+        bcf.allowedUnits = [.useBytes, .useKB, .useMB, .useGB]
+        bcf.countStyle = .file
+        return bcf.string(fromByteCount: bytes)
     }
 
     // MARK: About

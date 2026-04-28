@@ -21,4 +21,16 @@ protocol MailRepository: Sendable {
     // Body plane
     func loadBody(messageID: UUID) async -> MailMessageBody?
     func storeBody(messageID: UUID, body: MailMessageBody) async
+
+    /// Drop any in-memory derivations the repository keeps (header
+    /// snapshots, summary caches, …). Used by debug "wipe local cache"
+    /// after the SQLite tables have been re-created — without it the
+    /// next `loadMessages()` would return the stale pre-wipe array.
+    func invalidateCaches() async
+}
+
+extension MailRepository {
+    /// Default — most repositories don't cache, so this is a no-op.
+    /// `MailStoreRepository` overrides to drop its `headerSnapshot`.
+    func invalidateCaches() async {}
 }

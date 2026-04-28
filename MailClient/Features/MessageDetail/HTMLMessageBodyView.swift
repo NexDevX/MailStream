@@ -69,10 +69,31 @@ struct HTMLMessageBodyView: NSViewRepresentable {
     }
 
     func updateNSView(_ view: WKWebView, context: Context) {
-        // Re-disable on every update; AppKit may rebuild internal subviews.
-        Self.disableInternalScroll(in: view)
+        // Refresh the coordinator's `parent` snapshot so the height
+        // callback closure invokes the *current* SwiftUI state setter,
+        // not the one captured when the coordinator was first built.
+        context.coordinator.parent = self
+
         let processed = allowRemoteImages ? html : Self.blockRemoteAssets(in: html)
         let wrapped = Self.wrap(processed)
+
+        // The bug we're guarding against: SwiftUI calls `updateNSView`
+        // on *every* re-render of the parent view tree (selection
+        // changes, hover state on a sibling button, height callback
+        // bouncing back into our own @State, …). If we unconditionally
+        // re-load the same HTML, WKWebView discards the rendered
+        // document and repaints from white → the user sees a flash.
+        // Skip the reload when the wrapped output is byte-identical
+        // to what's already showing.
+        if context.coordinator.lastLoadedHTML == wrapped {
+            return
+        }
+        context.coordinator.lastLoadedHTML = wrapped
+
+        // Re-disable internal scrollers on actual loads only — AppKit
+        // may rebuild subviews when the document changes, but doesn't
+        // when we skip above.
+        Self.disableInternalScroll(in: view)
         view.loadHTMLString(wrapped, baseURL: nil)
     }
 
@@ -89,6 +110,12 @@ struct HTMLMessageBodyView: NSViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         var parent: HTMLMessageBodyView
+        /// Snapshot of the last HTML we actually handed to
+        /// `loadHTMLString`. Used by `updateNSView` to short-circuit
+        /// no-op reloads. The whole-string compare is fine for our
+        /// payload sizes (median ~30 KB, max ~3 MB) — SwiftUI calls
+        /// `updateNSView` at human-frame cadence at worst.
+        var lastLoadedHTML: String?
         init(_ parent: HTMLMessageBodyView) { self.parent = parent }
 
         // Navigation: open external links in the system browser.

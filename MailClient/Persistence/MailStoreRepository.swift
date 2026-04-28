@@ -76,6 +76,12 @@ actor MailStoreRepository: MailRepository {
         }
     }
 
+    /// Drop the cached header snapshot so the next `loadMessages()`
+    /// re-queries SQLite. Used after a destructive wipe of the DB.
+    func invalidateCaches() async {
+        headerSnapshot = nil
+    }
+
     func appendMessage(_ message: MailMessage) async {
         headerSnapshot = nil
         guard let accountID = message.accountID else { return }

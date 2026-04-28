@@ -65,18 +65,62 @@ Mail now persists across launches. SQLite is the source of truth; the old
 
 All five sub-steps shipped — see the DONE section above.
 
-## 🔜 Phase 3 — Real provider adapters
+## 🟡 Phase 3 — Real provider adapters
 
 Per-provider implementations of `MailProviderAdapter`:
-- `QQMailAdapter` — wrap the existing IMAP code currently in
-  `QQMailService.swift` (kept untouched in Phase 1 to avoid breakage)
-- `GenericIMAPAdapter` — host/port/auth pluggable
-- `GmailAdapter` — OAuth2 + Gmail REST API
-- `OutlookAdapter` — MSAL + Microsoft Graph
-- `ICloudAdapter` — IMAP with app-specific password
+- ✅ `GenericIMAPAdapter` — host/port pluggable, hand-rolled IMAP4rev1
+  client (LOGIN / LIST / SELECT / UID FETCH HEADER + BODY / UID STORE)
+  over the existing `SecureMailStreamClient` TLS transport. SMTP send
+  path included. `Services/Providers/GenericIMAPAdapter.swift` +
+  `IMAPClient.swift` + `IMAPResponseParser.swift` (12 tests).
+- ✅ `QQMailAdapter` — pre-set `IMAPProviderConfig` for
+  `imap.qq.com:993` / `smtp.qq.com:465`. Capability set still empty
+  pending end-to-end verification of CONDSTORE / IDLE on QQ.
+- ✅ `MailSyncEngine` (workstream A4) — replaces `MailSyncService`.
+  Lists folders, picks Inbox, calls `adapter.fetchHeaders` (50-row
+  window), maps to `MailMessage` with a stable
+  `synthesizeMessageID(account, UID)` UUID, eager-prefetches the
+  freshest 8 bodies. `Core/Services/MailSyncEngine.swift` (8 tests).
+- ✅ `AppContainer` rewire (workstream A5) — production graph now
+  uses `MailProviderAdapterRegistry([QQMailAdapter()])` and
+  `MailSyncEngine`. Retired `MailProvider` / `MailProviderRegistry`
+  / `QQMailProvider` / `SMTPMessageBuilder` /
+  `RawInternetMessageParser` / `MailAddressParser`; renamed the
+  remaining shared types' host file
+  `Core/Services/QQMailService.swift` → `MailServiceShared.swift`.
+- ✅ IMAP-UTF7 mailbox name decoding (workstream A7, 2026-04-28) —
+  `IMAPResponseParser.decodeMailboxName(_:)` turns wire-format names
+  like `&UXZO1mWHTvZZOQ-` into `其他文件夹`. `RemoteFolder.remoteID`
+  keeps the original encoded form so SELECT byte-round-trips. 5 unit
+  tests + verified live against QQ. Discovered by A8 smoke.
+- ✅ Live IMAP smoke harness (workstream A8, 2026-04-28) —
+  `IMAPLiveSmokeTests` gated on `docs/password.TXT` (gitignored),
+  exercises validate → list → fetchHeaders → fetchBody end-to-end
+  against a real account. Disabled by default so CI / fresh
+  checkouts don't hit the network.
+- 🔜 Real folder list (workstream A6) — sidebar reads from the
+  `folders` table populated by `listFolders()` instead of the static
+  `MailSidebarItem` enum. Also: bypass `MailMessage` in the upsert
+  path so the DB carries true IMAP `remoteUID` / `messageID` /
+  `threadID` (today they're synthesized via
+  `MailMessage.id.hashValue`, which is functionally OK for one
+  account but wasteful and lossy on resync).
+- 🔜 `GmailAdapter` — OAuth2 (workstream B) + Gmail REST API.
+- 🔜 `OutlookAdapter` — MSAL + Microsoft Graph (workstream B).
+- 🔜 `ICloudAdapter` — IMAP with app-specific password.
 
-Once adapters exist, `MailSyncEngine.swift` (under `Services/`) coordinates
-fetch → DAO writes → `AppState` notifies on `@Published` summaries.
+**Adapter shape decision:** the adapters target the new
+`MailProviderAdapter` protocol (header-first / UID-keyed / capability
+flags). As of A4/A5 (2026-04-28) the production `AppContainer` wires
+`QQMailAdapter` through `MailSyncEngine` — the legacy
+`MailProvider` / `QQMailProvider` POP3 path was deleted in the same
+commit.
+
+**Library decision (deferred):** `swift-nio-imap` is a
+`ChannelHandler` pair, not a high-level client. For one provider the
+hand-rolled IMAP client (~400 LOC) is shorter than the NIO bootstrap
+needed to drive NIOIMAP. Reconsider when Gmail / Outlook land. See
+`dependencies.md` for the updated take.
 
 ## 🔜 Phase 4 — Adaptivity & energy
 

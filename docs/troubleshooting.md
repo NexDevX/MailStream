@@ -239,6 +239,87 @@ security delete-generic-password -s com.mailstrea.app  # repeat per account
 
 ---
 
+## HTML body flickers / white-flashes on unrelated UI changes
+
+**Symptom.** Reading an HTML email is fine on first paint, but any
+subsequent activity in the window — hovering a sibling button,
+selection of a different message, even our own height callback
+landing — produces a brief white flash and re-loaded images. With
+remote-image-heavy newsletters the flash is severe.
+
+**Root cause.** `HTMLMessageBodyView.updateNSView` was calling
+`view.loadHTMLString(wrapped, baseURL: nil)` unconditionally. SwiftUI
+calls `updateNSView` on **every** ancestor re-render, not only when
+this view's own props change. WKWebView's `loadHTMLString` always
+discards the current document and starts fresh — that's the white
+flash. Once the new document parses, all `<img>` tags re-resolve from
+zero, the height reporter fires, our `@State contentHeight` updates,
+SwiftUI re-renders, `updateNSView` fires again. Loop.
+
+**Fix.** [HTMLMessageBodyView.swift](../MailClient/Features/MessageDetail/HTMLMessageBodyView.swift)
+
+- `Coordinator` gained `var lastLoadedHTML: String?`.
+- `updateNSView` computes `wrapped` exactly as before, then early-
+  returns when `wrapped == coordinator.lastLoadedHTML`. Internal-scroll
+  cleanup also moved inside the `loadHTMLString` branch since AppKit
+  only rebuilds subviews on actual document loads.
+- `coordinator.parent = self` at the top of every `updateNSView` so
+  the height callback closure invokes the *current* SwiftUI state
+  setters rather than a stale snapshot.
+
+**Detection.** Manual: open any HTML email, hover an unrelated UI
+element, observe no flash. Regression test would need a
+WKWebView-instantiating fixture which Swift Testing doesn't run
+without a host app — TODO.
+
+---
+
+## Mojibake folder names from QQ Mail (`&UXZO1mWHTvZZOQ-`)
+
+**Symptom.** After live-syncing a QQ Mail account, the sidebar
+shows folders with names like `&UXZO1mWHTvZZOQ-` instead of `其他文件夹`.
+The `roleForAttributes` matcher's localized name fallbacks
+(`已发送`, `垃圾邮件`, …) silently fail to fire because the input
+they receive is the encoded form, not the decoded one.
+
+**Root cause.** RFC 3501 §5.1.3 specifies that IMAP mailbox names are
+in **modified UTF-7** (a.k.a. IMAP-UTF7), not UTF-8. The encoding has
+two quirks vs. the standard UTF-7 codec Foundation ships:
+
+1. `&` is the shift character (instead of `+`).
+2. The base64 alphabet substitutes `,` for `/`, and there is no `=`
+   padding.
+
+`String(data:encoding:)` doesn't have an IMAP-UTF7 codec, and the
+`.utf7` codec it does have for plain UTF-7 produces wrong output.
+The path was emitting the wire bytes verbatim into `RemoteFolder.name`.
+
+**Fix.** [IMAPResponseParser.swift](../MailClient/Services/Providers/IMAPResponseParser.swift)
+gained `decodeMailboxName(_:)`:
+
+- Walks the input character by character.
+- Treats `&-` as a literal `&`.
+- For every `&...-` run, replaces `,` with `/`, pads to a multiple of
+  4 with `=`, base64-decodes, interprets as UTF-16BE, appends.
+- Falls back to "emit raw run" if a payload is malformed — never
+  hides a folder.
+
+Crucially, `GenericIMAPAdapter.listFolders` keeps the **original**
+encoded name on `RemoteFolder.remoteID` so subsequent
+`SELECT`/`EXAMINE` calls byte-round-trip the wire form. Only
+`RemoteFolder.name` (UI) and the input to `roleForAttributes` go
+through the decoder.
+
+**Detection.** [IMAPResponseParserTests.swift](../MailClient/Tests/IMAPResponseParserTests.swift)
+covers ASCII passthrough, `&-` literal, single Chinese folder
+(`&XfJT0ZAB-` → `已发送`), real QQ folder
+(`&UXZO1mWHTvZZOQ-` → `其他文件夹`), mixed ASCII / encoded with
+sub-folder delimiters, and malformed payload tolerance. Live
+[`IMAPLiveSmokeTests`](../MailClient/Tests/IMAPLiveSmokeTests.swift)
+prints the decoded folder list each run.
+
+---
+
 ## Build / test commands
 
 ```bash

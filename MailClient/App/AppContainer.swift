@@ -9,7 +9,7 @@ struct AppContainer {
     let database: MailDatabase
     let repository: any MailRepository
     let accountRepository: any MailAccountRepository
-    let syncService: MailSyncService
+    let syncService: MailSyncEngine
 
     static let live: AppContainer = {
         // 1. Open the SQLite cache. Falls back to a tmp path if Application
@@ -40,17 +40,17 @@ struct AppContainer {
         let accountRepository = MailStoreAccountRepository(db: database)
 
         let credentialsStore = MailAccountCredentialsStore()
-        let providerRegistry = MailProviderRegistry(
-            providers: [
-                QQMailProvider()
+        let adapterRegistry = MailProviderAdapterRegistry(
+            [
+                QQMailAdapter()
             ]
         )
         let accountService = MailAccountService(
             accountRepository: accountRepository,
             credentialsStore: credentialsStore,
-            providerRegistry: providerRegistry
+            adapterRegistry: adapterRegistry
         )
-        let syncService = MailSyncService(
+        let syncService = MailSyncEngine(
             repository: repository,
             accountService: accountService
         )

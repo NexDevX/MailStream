@@ -29,7 +29,7 @@ Three principles drive every architectural decision:
 | Phase 1 | SQLite cache (DAOs + migrations), MailProviderAdapter protocol, capability flags | ✅ shipped |
 | Phase 2 | Header/body split (`MailMessageBody`), `MailMessageBodyStore` LRU, lazy detail load, FTS5 search hookup | ✅ shipped |
 | Phase 2.5 | Real MIME parser (`MIMEParser`), HTML rendering via `WKWebView`, structured `MailAttachment`, scroll passthrough, narrow-window adaptation | ✅ shipped |
-| Phase 3 | Real IMAP via `swift-nio-imap`, OAuth2 via AppAuth, multi-folder sync, Sent / Drafts / Junk | 🟡 next |
+| Phase 3 | Real IMAP (hand-rolled — see decisions log), OAuth2 via AppAuth, multi-folder sync, Sent / Drafts / Junk | 🟡 in progress (A2/A3/A4/A5 shipped) |
 | Phase 4 | Background sync (`NSBackgroundActivityScheduler`), body cache eviction, `@ScaledMetric` on Retina/4K, Settings privacy controls | 🔵 planned |
 | Phase 5 | Threading view, batch select, AI summary card real implementation, signed/notarized release | 🔵 planned |
 
@@ -41,18 +41,21 @@ folders. Gmail and Outlook gain OAuth2 entry points.
 
 ### Workstream A — IMAP foundation
 
-| Step | Detail |
-| ---- | ------ |
-| A1 | Add `swift-nio-imap` + `swift-nio-ssl` via SPM through `project.yml` |
-| A2 | New `Services/Providers/GenericIMAPAdapter.swift` implementing `MailProviderAdapter` |
-| A3 | Migrate `QQMailService` content into `QQMailAdapter` (subclass / config of GenericIMAP) |
-| A4 | `MailSyncEngine` (new) — coordinator that owns folder enumeration, cursor advancement, body fetch on demand. Replaces the legacy refresh-all loop in `MailSyncService`. |
-| A5 | Wire `AppContainer` to register adapters via `MailProviderAdapterRegistry` |
-| A6 | Persist folder list per account; sidebar shows real folders, not the static enum |
+| Step | State | Detail |
+| ---- | ----- | ------ |
+| A1 | ⏭ skipped | `swift-nio-imap` deferred — see decisions log 2026-04-27. We hand-rolled `IMAPClient` over `SecureMailStreamClient` instead, ~530 LOC for one provider. |
+| A2 | ✅ 2026-04-27 | `Services/Providers/IMAPClient.swift` + `IMAPResponseParser.swift` (12 tests). |
+| A3 | ✅ 2026-04-27 | `GenericIMAPAdapter` + `QQMailAdapter` thin config. |
+| A4 | ✅ 2026-04-28 | `MailSyncEngine` replaces `MailSyncService`. Stable `MailMessage.id` via `SHA1(account ‖ UID)`. 8 tests. |
+| A5 | ✅ 2026-04-28 | `AppContainer.live` wires `MailProviderAdapterRegistry([QQMailAdapter()])`; legacy `MailProvider` / `QQMailProvider` / SMTP helpers retired. |
+| A6 | 🔜 | Persist folder list per account; sidebar reads from `folders` table; repository accepts `RemoteHeader` directly so `remoteUID` / `messageID` / `threadID` are first-class. |
+| A7 | ✅ 2026-04-28 | IMAP-UTF7 mailbox name decoding (`IMAPResponseParser.decodeMailboxName`). 5 tests. Was a follow-up after live smoke turned up `&UXZO1mWHTvZZOQ-` from QQ. |
+| A8 | ✅ 2026-04-28 | Live smoke harness — `IMAPLiveSmokeTests`, gated on `docs/password.TXT`, exercises full validate → list → fetchHeaders → fetchBody chain end-to-end against a real account. |
 
 **Done when:** QQ account connects, all server folders visible in
 sidebar, message body lazy-loads via `BODY[]` IMAP fetch, send goes
-through SMTP using the same NIO substrate.
+through SMTP. The first three are already verified by smoke; sidebar
+still reads the static enum until A6 lands.
 
 ### Workstream B — OAuth2 entry points
 
@@ -127,3 +130,44 @@ date and rationale. The decision matters more than the alternatives.
   subclass forwarding `scrollWheel(with:)`. Reason: there's no public
   API for this; the alternatives (overlay tricks, pure JS scroll
   forwarding) were either visually wrong or laggy.
+- **2026-04-27** — Hand-rolled `IMAPClient` over the existing
+  `SecureMailStreamClient` instead of adopting `swift-nio-imap`.
+  Reason: NIOIMAP is a `ChannelHandler` pair with no high-level
+  client — using it would mean ~800–1500 LOC of NIO orchestration
+  on top of the actual adapter. For one provider (QQ) the hand-rolled
+  client is ~530 LOC total and keeps deps at zero. Revisit when Gmail
+  (XOAUTH2) and Outlook (Graph) earn the NIO substrate.
+- **2026-04-28** — Renamed `MailSyncService` → `MailSyncEngine` and
+  retired the entire `MailProvider` / POP3 path (`QQMailProvider`,
+  `SMTPMessageBuilder`, `RawInternetMessageParser`,
+  `MailAddressParser`). The old type names were carrying a "legacy
+  POP3" mental model that the implementation had outgrown. Everything
+  now goes through `MailProviderAdapter` + `MailProviderAdapterRegistry`.
+- **2026-04-28** — Stable `MailMessage.id` derived from
+  `SHA1(accountID || remoteUID.bigEndian)`, folded into a UUID, on
+  every map from `RemoteHeader`. Reason: the old random-UUID-per-parse
+  policy made every refresh invalidate the body cache, killed selection
+  state, and meant the SQLite unique constraint on
+  `(account, folder, remote_uid)` couldn't dedupe. SHA1 is fine here
+  because the input space is tiny and the property we care about is
+  determinism, not collision resistance — `CryptoKit` would pull a
+  real dependency into Core for no benefit.
+- **2026-04-28** — Cache last-loaded HTML in
+  `HTMLMessageBodyView.Coordinator` and short-circuit
+  `view.loadHTMLString(...)` on identical content. Reason: SwiftUI
+  calls `updateNSView` on every ancestor re-render; reloading the
+  WebView each time visually flashed white and re-fetched images.
+  See `troubleshooting.md` "HTML body flickers / white-flashes on
+  unrelated UI changes".
+- **2026-04-28** — Hand-rolled IMAP-UTF7 (modified UTF-7) decoder for
+  mailbox names. Reason: QQ Mail returns custom Chinese folders like
+  `&UXZO1mWHTvZZOQ-` (= `其他文件夹`); Foundation has no IMAP-UTF7
+  codec, only standard UTF-7 (which differs in base64 alphabet and
+  padding rules). 50 LOC + 5 unit tests beats pulling a third-party
+  IMAP library for one transformation.
+- **2026-04-28** — `IMAPLiveSmokeTests` gated on the presence of
+  `docs/password.TXT` (gitignored), not on an env var. Reason: env
+  vars don't reliably propagate through `xcodebuild test` to the
+  Swift Testing runner; file-presence is observable both at suite
+  registration time (`@Suite(.disabled(if:))`) and inside test
+  bodies, with no extra command-line plumbing.

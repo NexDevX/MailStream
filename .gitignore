@@ -4,3 +4,9 @@ dist/
 DerivedData/
 MailClient.xcodeproj/
 .omx/
+
+# Local-only credentials for live smoke tests against real mail
+# providers. Never commit. See docs/password.TXT.example for the
+# expected format (line 1: email, line 2: app password).
+docs/password.TXT
+docs/password.txt

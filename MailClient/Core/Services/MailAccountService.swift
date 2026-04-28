@@ -3,16 +3,16 @@ import Foundation
 actor MailAccountService {
     private let accountRepository: any MailAccountRepository
     private let credentialsStore: MailAccountCredentialsStore
-    private let providerRegistry: MailProviderRegistry
+    private let adapterRegistry: MailProviderAdapterRegistry
 
     init(
         accountRepository: any MailAccountRepository,
         credentialsStore: MailAccountCredentialsStore,
-        providerRegistry: MailProviderRegistry
+        adapterRegistry: MailProviderAdapterRegistry
     ) {
         self.accountRepository = accountRepository
         self.credentialsStore = credentialsStore
-        self.providerRegistry = providerRegistry
+        self.adapterRegistry = adapterRegistry
     }
 
     func loadAccounts() async -> [MailAccount] {
@@ -27,7 +27,7 @@ actor MailAccountService {
             throw MailServiceError.invalidEmailAddress
         }
 
-        let provider = try providerRegistry.provider(for: draft.providerType)
+        let adapter = try adapterRegistry.adapter(for: draft.providerType)
         var account = MailAccount(
             providerType: draft.providerType,
             displayName: draft.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? normalizedEmailAddress : draft.displayName.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -40,7 +40,7 @@ actor MailAccountService {
             emailAddress: normalizedEmailAddress,
             secret: draft.secret
         )
-        try await provider.validateConnection(account: account, credentials: credentials)
+        try await adapter.validateConnection(account: account, credentials: credentials)
         try await credentialsStore.saveCredentials(accountID: account.id, secret: draft.secret)
 
         account.status = .connected
@@ -62,16 +62,16 @@ actor MailAccountService {
         return credentials
     }
 
-    func provider(for account: MailAccount) throws -> any MailProvider {
-        try providerRegistry.provider(for: account.providerType)
+    func adapter(for account: MailAccount) throws -> any MailProviderAdapter {
+        try adapterRegistry.adapter(for: account.providerType)
     }
 
     func isProviderAvailable(_ providerType: MailProviderType) -> Bool {
-        providerRegistry.isAvailable(providerType)
+        adapterRegistry.isAvailable(providerType)
     }
 
     func availableProviderTypes() -> [MailProviderType] {
-        MailProviderType.allCases.filter { providerRegistry.isAvailable($0) }
+        MailProviderType.allCases.filter { adapterRegistry.isAvailable($0) }
     }
 
     func markSyncSuccess(for accountID: UUID) async {

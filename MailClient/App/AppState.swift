@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 enum InboxFilterChip: String, CaseIterable, Identifiable {
     case all, unread, priority, attach, mentions
@@ -81,7 +82,7 @@ final class AppState: ObservableObject {
     private static let densityDefaultsKey  = "mailclient.list.density"
 
     private let repository: any MailRepository
-    private let syncService: MailSyncService
+    private let syncService: MailSyncEngine
 
     @Published var selectedSidebarItem: SidebarItem = .allMail {
         didSet { syncSelectionIfNeeded() }
@@ -163,7 +164,7 @@ final class AppState: ObservableObject {
     init(
         database: MailDatabase? = nil,
         repository: any MailRepository,
-        syncService: MailSyncService,
+        syncService: MailSyncEngine,
         initialMessages: [MailMessage],
         bodyStore: MailMessageBodyStore? = nil
     ) {
@@ -362,10 +363,104 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Debug affordances
+    //
+    // Temporary helpers exposed to the Settings → Debug panel while we
+    // shake out the persistence path. They are deliberately blunt:
+    // the user explicitly wants to be able to nuke local state and
+    // observe what gets repopulated by sync. Remove once the cache
+    // path is trusted enough that we no longer ship "Reset" to users.
+
+    /// Absolute file path of the SQLite cache. `nil` only in pure
+    /// in-memory test setups where `database` was never wired.
+    var databaseFilePath: String? {
+        database?.fileURL.path
+    }
+
+    /// On-disk size of the SQLite file + WAL/SHM sidecars. 0 when the
+    /// file isn't reachable yet (e.g. before the first write).
+    func databaseSizeBytes() async -> Int64 {
+        guard let database else { return 0 }
+        return database.fileSizeBytes()
+    }
+
+    /// **Destructive.** Disconnect every account (clears Keychain
+    /// entries + DB rows + cascaded folders/messages), drop and
+    /// re-create every SQLite table, invalidate the body cache, and
+    /// reload UI state. Surfaced through Settings → Debug.
+    ///
+    /// We disconnect accounts *first* so credentials are revoked even
+    /// if the table drop fails halfway. The account list comes back
+    /// empty either way; if `wipeAndReset` errors out the user is
+    /// already in a known-empty state and we surface the SQLite error
+    /// in the status bar.
+    func wipeLocalCache() async {
+        mailboxStatusMessage = language == .simplifiedChinese
+            ? "正在清空本地缓存…"
+            : "Wiping local cache…"
+
+        // 1. Disconnect every account — revokes credentials + cascades
+        //    folder / message / sync_state rows via FK ON DELETE.
+        let snapshot = accounts
+        for account in snapshot {
+            do {
+                try await syncService.removeAccount(id: account.id)
+            } catch {
+                MailClientLogger.storage.error(
+                    "wipeLocalCache: removeAccount(\(account.emailAddress)) failed: \(error.localizedDescription)"
+                )
+            }
+        }
+
+        // 2. Defensive table drop — catches stragglers (orphan rows in
+        //    standalone caches, residual drafts, …) that aren't FK'd
+        //    to accounts.
+        if let database {
+            do {
+                try await database.wipeAndReset()
+            } catch {
+                MailClientLogger.storage.error("wipeLocalCache: \(error.localizedDescription)")
+                mailboxStatusMessage = error.localizedDescription
+                return
+            }
+        }
+
+        // 3. Clear in-memory derivations. The repository's header
+        //    snapshot would otherwise return the pre-wipe array on
+        //    the next read, which is exactly the wrong observation
+        //    for the user.
+        await repository.invalidateCaches()
+        await bodyStore.invalidateAll()
+
+        // 4. Reset UI state in this order: messages → accounts.
+        //    Selection clearing is handled by `syncSelectionIfNeeded`
+        //    once `messages` lands empty.
+        selectedMessageID = nil
+        selectedBody = nil
+        await reloadMessages()
+        await reloadAccounts()
+
+        mailboxStatusMessage = language == .simplifiedChinese
+            ? "本地缓存已清空。重新添加账号后会同步最新数据。"
+            : "Local cache cleared. Re-add an account to sync fresh data."
+    }
+
+    /// Open the Application Support folder containing the SQLite file
+    /// in Finder. Useful while debugging "is anything actually written
+    /// here?" — the user can poke the file with `.dump` or DB Browser.
+    func revealDatabaseInFinder() {
+        guard let path = databaseFilePath else { return }
+        let url = URL(fileURLWithPath: path)
+        // Reveal the file (highlighted) rather than just opening the
+        // directory, so the user immediately sees which file is "the"
+        // database vs. the WAL/SHM sidecars.
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
     // MARK: - Account UI helpers
 
     /// Mock toggle — flips local enabled-set without touching the credential
-    /// store. Real impl would push the change down to MailSyncService.
+    /// store. Real impl would push the change down to MailSyncEngine.
     func toggleAccountEnabled(_ account: MailAccount) {
         if disabledAccountIDs.contains(account.id) {
             disabledAccountIDs.remove(account.id)

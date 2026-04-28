@@ -135,10 +135,20 @@ step. Never edit a shipped V1 — always add V2.
 
 ## Roadmap
 
-- Wire `MailSyncEngine` end-to-end (currently QQMailService is the legacy
-  monolith — being decomposed into `QQMailAdapter`)
-- Implement `GmailAdapter` (OAuth2 + Gmail API)
-- Implement `OutlookAdapter` (MSAL + Microsoft Graph)
-- Add a single `Tests/Persistence/` suite covering migrations + DAO
-- Add background polling timer with `NSBackgroundActivityScheduler`
-- Add per-folder sync prioritization (inbox first, archive last)
+`MailSyncEngine` is wired end-to-end as of 2026-04-28: production
+`AppContainer` registers `QQMailAdapter` through
+`MailProviderAdapterRegistry`, and the legacy `MailProvider` /
+`QQMailService` POP3 path is gone. Live IMAP smoke against a real
+QQ account passes (folder list, header window, body fetch, MUTF-7
+decoding). See [`roadmap.md`](./roadmap.md) for the live status of
+the rest:
+
+- 🔜 **A6** — persist the folder list per account; sidebar reads from
+  the `folders` table instead of the static `MailSidebarItem` enum;
+  give the repository a `RemoteHeader` upsert path so `remoteUID`,
+  `messageID`, `threadID` round-trip without going through `MailMessage`.
+- 🔜 **GmailAdapter** (OAuth2 + Gmail API) and **OutlookAdapter**
+  (MSAL + Graph) — Workstream B.
+- 🔜 Per-folder sync prioritization (inbox first, archive last).
+- 🔜 Background polling via `NSBackgroundActivityScheduler`.
+- 🔜 A single `Tests/Persistence/` suite covering migrations + DAO.

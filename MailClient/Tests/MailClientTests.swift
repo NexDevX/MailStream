@@ -32,13 +32,13 @@ func appStateBootstrapsWithInitialSelection() {
     )
     let accountRepository = FileBackedMailAccountRepository(fileURL: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString))
     let credentialsStore = MailAccountCredentialsStore()
-    let providerRegistry = MailProviderRegistry(providers: [QQMailProvider()])
+    let adapterRegistry = MailProviderAdapterRegistry([QQMailAdapter()])
     let accountService = MailAccountService(
         accountRepository: accountRepository,
         credentialsStore: credentialsStore,
-        providerRegistry: providerRegistry
+        adapterRegistry: adapterRegistry
     )
-    let syncService = MailSyncService(
+    let syncService = MailSyncEngine(
         repository: repository,
         accountService: accountService
     )
