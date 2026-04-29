@@ -383,13 +383,32 @@ final class ScrollPassthroughWebView: WKWebView {
     var freezeWidth: Bool = false
     private var lastCommittedWidth: CGFloat = 0
 
+    // Intercept BOTH the `frame` property setter and `setFrameSize(_:)`.
+    // WKWebView is hosted via Auto Layout, so the constraint solver
+    // sets `frame` directly (Swift bridges this to the ObjC
+    // -setFrame: selector). setFrameSize is the autoresizing-masked
+    // path; overriding it costs nothing and protects future call
+    // sites. While freezeWidth is true we replace the width portion
+    // of any incoming geometry with `lastCommittedWidth` so WebKit
+    // never sees a width change → no document relayout → no flicker.
+    override var frame: NSRect {
+        get { super.frame }
+        set {
+            if freezeWidth, lastCommittedWidth > 0 {
+                var clamped = newValue
+                clamped.size.width = lastCommittedWidth
+                super.frame = clamped
+                return
+            }
+            super.frame = newValue
+            if newValue.size.width > 0 {
+                lastCommittedWidth = newValue.size.width
+            }
+        }
+    }
+
     override func setFrameSize(_ newSize: NSSize) {
         if freezeWidth, lastCommittedWidth > 0 {
-            // Drop the width portion of the proposed change. AppKit
-            // is asking us to widen / narrow because the parent
-            // SwiftUI HStack is redistributing space mid-drag, but
-            // letting that through forces WebKit to re-layout the
-            // document, which is the visible "flicker".
             super.setFrameSize(NSSize(width: lastCommittedWidth, height: newSize.height))
             return
         }
